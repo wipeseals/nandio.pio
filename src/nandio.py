@@ -1,3 +1,4 @@
+import itertools
 from typing import List, Optional, Union
 from enum import Enum
 
@@ -189,7 +190,6 @@ class CmdBuilder:
     @classmethod
     def init_pin(
         cls,
-        arg0: Optional[int] = None,
     ) -> List[int]:
         """Initialize pin direction and set transfer count."""
         return cls.create_cmd_header(
@@ -232,4 +232,18 @@ class CmdBuilder:
             pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
             arg0=Util.bitmerge_cs(cmd, select_cs),
+        )
+
+    @classmethod
+    def seq_reset(cls, cs: int) -> List[int]:
+        """Reset sequence for NAND Flash."""
+        return list(
+            itertools.chain.from_iterable(
+                [
+                    cls.init_pin(),
+                    cls.assert_cs(select_cs=cs),
+                    cls.cmd_latch(cmd=NandCommandId.Reset, select_cs=cs),
+                    cls.deassert_cs(select_cs=cs),
+                ]
+            )
         )
