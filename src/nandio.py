@@ -1,0 +1,183 @@
+from typing import List, Optional, Union
+from enum import Enum
+
+
+class CommandId(Enum):
+    """NAND Flash Command"""
+
+    SerialDataInput = 0x80
+    Read1stCycle = 0x00
+    Read2ndCycle = 0x30
+    ReadWithDataCache = 0x31
+    ReadStartForLastPageInReadCycleWithDataCache = 0x3F
+    AutoPageProgram1stCycle = 0x80
+    AutoPageProgram2ndCycle = 0x10
+    ColumnAddressChangeInSerialDataInput = 0x85
+    AutoPageProgramWithDataCache1stCycle = 0x80
+    AutoPageProgramWithDataCache2ndCycle = 0x15
+    ReadForPageCopyWithDataOut1stCycle = 0x00
+    ReadForPageCopyWithDataOut2ndCycle = 0x3A
+    AutoProgramWithDataCacheDuringPageCopy1stCycle = 0x8C
+    AutoProgramWithDataCacheDuringPageCopy2ndCycle = 0x15
+    AutoProgramForLastPageDuringPageCopy1stCycle = 0x8C
+    AutoProgramForLastPageDuringPageCopy2ndCycle = 0x10
+    AutoBlockErase1stCycle = 0x60
+    AutoBlockErase2ndCycle = 0xD0
+    ReadId = 0x90
+    StatusRead = 0x70
+    Reset = 0xFF
+
+
+class PinAssign:
+    """
+    NAND IC Pinout
+    | 15  | 14  | 13  | 12  | 11  | 10  | 9    | 8    | 7   | 6   | 5   | 4   | 3   | 2   | 1   | 0   |
+    | --- | --- | --- | --- | --- | --- | ---- | ---- | --- | --- | --- | --- | --- | --- | --- | --- |
+    | rbb | reb | web | wpb | ale | cle | ceb1 | ceb0 | io7 | io6 | io5 | io4 | io3 | io2 | io1 | io0 |
+    | in  | out | out | out | out | out | out  | out  | io  | io  | io  | io  | io  | io  | io  | io  |
+    """
+
+    IO0 = 0
+    IO1 = 1
+    IO2 = 2
+    IO3 = 3
+    IO4 = 4
+    IO5 = 5
+    IO6 = 6
+    IO7 = 7
+    CEB0 = 8
+    CEB1 = 9
+    CLE = 10
+    ALE = 11
+    WPB = 12
+    WEB = 13
+    REB = 14
+    RBB = 15
+
+
+class Util:
+    @staticmethod
+    def bit_on(bit_pos: int) -> int:
+        """指定したbitだけ1の値"""
+        return 0x01 << bit_pos
+
+    @staticmethod
+    def combine_halfword(low: int, high: int) -> int:
+        """2byteの値を結合する"""
+        return (high << 16) | low
+
+    @classmethod
+    def gen_ceb_bits(cls, select_cs: Optional[int] = None) -> int:
+        """cs指定からCEB0/CEB1のピン状態を返す"""
+        if select_cs is None:
+            return cls.bit_on(PinAssign.CEB0.value) | cls.bit_on(PinAssign.CEB1.value)
+        elif select_cs == 0:
+            return cls.bit_on(PinAssign.CEB1.value)
+        elif select_cs == 1:
+            return cls.bit_on(PinAssign.CEB0.value)
+        else:
+            raise ValueError("select_cs must be 0 or 1 or None")
+
+    @classmethod
+    def bitmerge_cs(
+        cls, data_src: Union[int, List[int]], select_cs: Optional[int]
+    ) -> Union[int, List[int]]:
+        """data_srcに対して、csを指定してCEB0/CEB1をセットする。単一変数・リストどちらでも対応"""
+        if isinstance(data_src, int):
+            return cls.gen_ceb_bits(select_cs) | data_src
+        else:
+            return [cls.gen_ceb_bits(select_cs) | data for data in data_src]
+
+
+# RBB以外全部Outputに設定するpindir値
+WRITE_PIN_DIR: int = (
+    Util.bit_on(PinAssign.REB.value)
+    | Util.bit_on(PinAssign.WEB.value)
+    | Util.bit_on(PinAssign.ALE.value)
+    | Util.bit_on(PinAssign.CLE.value)
+    | Util.bit_on(PinAssign.CEB1.value)
+    | Util.bit_on(PinAssign.CEB0.value)
+    | Util.bit_on(PinAssign.IO7.value)
+    | Util.bit_on(PinAssign.IO6.value)
+    | Util.bit_on(PinAssign.IO5.value)
+    | Util.bit_on(PinAssign.IO4.value)
+    | Util.bit_on(PinAssign.IO3.value)
+    | Util.bit_on(PinAssign.IO2.value)
+    | Util.bit_on(PinAssign.IO1.value)
+    | Util.bit_on(PinAssign.IO0.value)
+)
+
+# RBB,IO以外Outputに設定するpindir値
+READ_PIN_DIR: int = (
+    Util.bit_on(PinAssign.REB.value)
+    | Util.bit_on(PinAssign.WEB.value)
+    | Util.bit_on(PinAssign.WPB.value)
+    | Util.bit_on(PinAssign.ALE.value)
+    | Util.bit_on(PinAssign.CLE.value)
+    | Util.bit_on(PinAssign.CEB1.value)
+    | Util.bit_on(PinAssign.CEB0.value)
+)
+
+
+class NandAddr:
+    @staticmethod
+    def create_full_addr(
+        column_addr: int, page_addr: int, block_addr: int
+    ) -> List[int]:
+        """アドレスをNAND Flashの指定フォーマットに変換する。Schematic Cell Layout and Address Assignment参照
+
+        |              | I/O7 | I/O6 | I/O5 | I/O4 | I/O3 | I/O2 | I/O1 | I/O0 |
+        | -------------|------|------|------|------|------|------|------|------|
+        | First  cycle | CA7  | CA6  | CA5  | CA4  | CA3  | CA2  | CA1  | CA0  |
+        | Second cycle | L    | L    | L    | L    | CA11 | CA10 | CA9  | CA8  |
+        | Third  cycle | PA7  | PA6  | PA5  | PA4  | PA3  | PA2  | PA1  | PA0  |
+        | Fourth cycle | PA15 | PA14 | PA13 | PA12 | PA11 | PA10 | PA9  | PA8  |
+
+        - CA0 to CA11: Column address
+        - PA0 to PA5: Page address in block
+        - PA6 to PA15: Block address
+        """
+        ca = column_addr & 0xFFF
+        pa = (page_addr & 0x3F) | ((block_addr & 0x3FF) << 6)
+        return [
+            ca & 0xFF,
+            (ca >> 8) & 0x0F,
+            pa & 0xFF,
+            (pa >> 8) & 0xFF,
+        ]
+
+    @staticmethod
+    def create_block_addr(block_addr: int) -> List[int]:
+        """Block Addressを2byteのAddressInput用に変換する。Auto Block Erase用。"""
+        return [
+            block_addr & 0xFF,
+            (block_addr >> 8) & 0xFF,
+        ]
+
+
+class PioCmdId:
+    """Broccoli NAND IO Command"""
+
+    Bitbang = 0x00
+    CmdLatch = 0x01
+    AddrLatch = 0x02
+    DataOutput = 0x03
+    DataInput = 0x04
+    SetIrq = 0x05
+    WaitRbb = 0x06
+
+
+def create_payload(
+    cmd_id: PioCmdId,
+    pindirs: int,
+    transfer_count: int,
+    arg0: Optional[int],
+) -> List[int]:
+    """コマンドの先頭wordを返す. RShiftで取り出す想定. transfer_countに実際にセットされる値は、pio都合で-1される。"""
+    return [
+        # cmd_0 = { cmd_id[3:0], transfer_count[11:0], pindirs[15:0] }
+        ((cmd_id.value & 0xF) << 28)
+        | ((((transfer_count - 1) & 0x0FFF) << 16) | (pindirs & 0xFFFF)),
+        # arg_0 = { arg0[31:0] }
+        arg0 if arg0 is not None else 0x00000000,
+    ]
