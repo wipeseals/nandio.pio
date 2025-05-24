@@ -1,3 +1,4 @@
+import array
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -15,7 +16,7 @@ class Util:
     @staticmethod
     def to_hex_u32(x: int) -> str:
         """32bit符号なし整数を16進数文字列に変換する"""
-        return f"0x{(x& 0xffffffff):08X}"
+        return f"0x{(x & 0xFFFFFFFF):08X}"
 
     @classmethod
     def to_hex_str_arr(cls, src: List[int]) -> List[str]:
@@ -104,7 +105,7 @@ class Result:
 
 class Simulator:
     @staticmethod
-    def __analyze_steps(states_df: pd.DataFrame) -> None:
+    def __analyze_steps(states_df: pd.DataFrame, opcodes: array.array) -> None:
         def get_insert_idx() -> int:
             """DataFrameに新しい列を挿入するためのインデックスを返す"""
 
@@ -410,7 +411,7 @@ class Simulator:
         """PIOのsimulationを行う"""
 
         # pio textをアセンブルして、opcodesを生成
-        opcodes = adafruit_pioasm.assemble(program_str)
+        opcodes: array.array = adafruit_pioasm.assemble(program_str)
         # emulatorセットアップ
         emu_generator = pioemu.emulate(
             opcodes=opcodes,
@@ -449,7 +450,7 @@ class Simulator:
         # 最終stepのrxfifoの状態を抽出
         rx_fifo = list(states_df[-1:]["receive_fifo"].values[0])
         # 各stepの情報をparseし、信号の情報を抽出
-        cls.__analyze_steps(states_df)
+        cls.__analyze_steps(states_df, opcodes)
         # イベントだけを抽出しておく
         event_df = cls.__extract_events(states_df)
         # wavedrom向けobjectに変換し、SVGに変換
