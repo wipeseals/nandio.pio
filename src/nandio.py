@@ -2,7 +2,7 @@ from typing import List, Optional, Union
 from enum import Enum
 
 
-class CommandId(Enum):
+class NandCommandId:
     """NAND Flash Command"""
 
     SerialDataInput = 0x80
@@ -70,11 +70,11 @@ class Util:
     def gen_ceb_bits(cls, select_cs: Optional[int] = None) -> int:
         """cs指定からCEB0/CEB1のピン状態を返す"""
         if select_cs is None:
-            return cls.bit_on(PinAssign.CEB0.value) | cls.bit_on(PinAssign.CEB1.value)
+            return cls.bit_on(PinAssign.CEB0) | cls.bit_on(PinAssign.CEB1)
         elif select_cs == 0:
-            return cls.bit_on(PinAssign.CEB1.value)
+            return cls.bit_on(PinAssign.CEB1)
         elif select_cs == 1:
-            return cls.bit_on(PinAssign.CEB0.value)
+            return cls.bit_on(PinAssign.CEB0)
         else:
             raise ValueError("select_cs must be 0 or 1 or None")
 
@@ -90,32 +90,32 @@ class Util:
 
 
 # RBB以外全部Outputに設定するpindir値
-WRITE_PIN_DIR: int = (
-    Util.bit_on(PinAssign.REB.value)
-    | Util.bit_on(PinAssign.WEB.value)
-    | Util.bit_on(PinAssign.ALE.value)
-    | Util.bit_on(PinAssign.CLE.value)
-    | Util.bit_on(PinAssign.CEB1.value)
-    | Util.bit_on(PinAssign.CEB0.value)
-    | Util.bit_on(PinAssign.IO7.value)
-    | Util.bit_on(PinAssign.IO6.value)
-    | Util.bit_on(PinAssign.IO5.value)
-    | Util.bit_on(PinAssign.IO4.value)
-    | Util.bit_on(PinAssign.IO3.value)
-    | Util.bit_on(PinAssign.IO2.value)
-    | Util.bit_on(PinAssign.IO1.value)
-    | Util.bit_on(PinAssign.IO0.value)
+PIN_DIR_WRITE: int = (
+    Util.bit_on(PinAssign.REB)
+    | Util.bit_on(PinAssign.WEB)
+    | Util.bit_on(PinAssign.ALE)
+    | Util.bit_on(PinAssign.CLE)
+    | Util.bit_on(PinAssign.CEB1)
+    | Util.bit_on(PinAssign.CEB0)
+    | Util.bit_on(PinAssign.IO7)
+    | Util.bit_on(PinAssign.IO6)
+    | Util.bit_on(PinAssign.IO5)
+    | Util.bit_on(PinAssign.IO4)
+    | Util.bit_on(PinAssign.IO3)
+    | Util.bit_on(PinAssign.IO2)
+    | Util.bit_on(PinAssign.IO1)
+    | Util.bit_on(PinAssign.IO0)
 )
 
 # RBB,IO以外Outputに設定するpindir値
-READ_PIN_DIR: int = (
-    Util.bit_on(PinAssign.REB.value)
-    | Util.bit_on(PinAssign.WEB.value)
-    | Util.bit_on(PinAssign.WPB.value)
-    | Util.bit_on(PinAssign.ALE.value)
-    | Util.bit_on(PinAssign.CLE.value)
-    | Util.bit_on(PinAssign.CEB1.value)
-    | Util.bit_on(PinAssign.CEB0.value)
+PIN_DIR_READ: int = (
+    Util.bit_on(PinAssign.REB)
+    | Util.bit_on(PinAssign.WEB)
+    | Util.bit_on(PinAssign.WPB)
+    | Util.bit_on(PinAssign.ALE)
+    | Util.bit_on(PinAssign.CLE)
+    | Util.bit_on(PinAssign.CEB1)
+    | Util.bit_on(PinAssign.CEB0)
 )
 
 
@@ -167,17 +167,69 @@ class PioCmdId:
     WaitRbb = 0x06
 
 
-def create_payload(
-    cmd_id: PioCmdId,
-    pindirs: int,
-    transfer_count: int,
-    arg0: Optional[int],
-) -> List[int]:
-    """コマンドの先頭wordを返す. RShiftで取り出す想定. transfer_countに実際にセットされる値は、pio都合で-1される。"""
-    return [
-        # cmd_0 = { cmd_id[3:0], transfer_count[11:0], pindirs[15:0] }
-        ((cmd_id.value & 0xF) << 28)
-        | ((((transfer_count - 1) & 0x0FFF) << 16) | (pindirs & 0xFFFF)),
-        # arg_0 = { arg0[31:0] }
-        arg0 if arg0 is not None else 0x00000000,
-    ]
+class CmdBuilder:
+    """PIO Command Build helper"""
+
+    @staticmethod
+    def create_cmd_header(
+        cmd_id: PioCmdId,
+        pindir: int,
+        transfer_count: int,
+        arg0: Optional[int],
+    ) -> List[int]:
+        """コマンドの先頭wordを返す. RShiftで取り出す想定. transfer_countに実際にセットされる値は、pio都合で-1される。"""
+        return [
+            # cmd_0 = { cmd_id[3:0], transfer_count[11:0], pindirs[15:0] }
+            ((cmd_id & 0xF) << 28)
+            | ((((transfer_count - 1) & 0x0FFF) << 16) | (pindir & 0xFFFF)),
+            # arg_0 = { arg0[31:0] }
+            arg0 if arg0 is not None else 0x00000000,
+        ]
+
+    @classmethod
+    def init_pin(
+        cls,
+        arg0: Optional[int] = None,
+    ) -> List[int]:
+        """Initialize pin direction and set transfer count."""
+        return cls.create_cmd_header(
+            cmd_id=PioCmdId.Bitbang,
+            pindir=PIN_DIR_WRITE,
+            transfer_count=1,  # don't care
+            arg0=Util.bitmerge_cs(0x00, None),
+        )
+
+    @classmethod
+    def assert_cs(
+        cls,
+        select_cs: Optional[int] = None,
+    ) -> List[int]:
+        """Set CEB0/CEB1 pin state."""
+        return cls.create_cmd_header(
+            cmd_id=PioCmdId.Bitbang,
+            pindir=PIN_DIR_WRITE,
+            transfer_count=1,  # don't care
+            arg0=Util.bitmerge_cs(0x00, select_cs),
+        )
+
+    @classmethod
+    def deassert_cs(
+        cls,
+        select_cs: Optional[int] = None,
+    ) -> List[int]:
+        """Deassert CEB0/CEB1 pin state."""
+        return cls.assert_cs(select_cs=None)
+
+    @classmethod
+    def cmd_latch(
+        cls,
+        cmd: NandCommandId,
+        select_cs: Optional[int] = None,
+    ) -> List[int]:
+        """Latch command to NAND Flash."""
+        return cls.create_cmd_header(
+            cmd_id=PioCmdId.CmdLatch,
+            pindir=PIN_DIR_WRITE,
+            transfer_count=1,  # don't care
+            arg0=Util.bitmerge_cs(cmd, select_cs),
+        )
