@@ -17,6 +17,7 @@
                 python312.pkgs.pytest   
                 python312.pkgs.jupyter   
                 micropython             
+                gtkwave
             ];
         };
     };
