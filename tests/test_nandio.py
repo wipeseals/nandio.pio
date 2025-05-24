@@ -39,3 +39,17 @@ class TestCmdBuilder:
 
         assert payload[0x0] == self.cmd0(PioCmdId.Bitbang, PIN_DIR_WRITE, 1)
         assert payload[0x1] == Util.bitmerge_cs(0x00, None)
+
+    @pytest.mark.parametrize(
+        "cs",
+        [0, 1, None],
+    )
+    @pytest.mark.parametrize(
+        "cmd",
+        [NandCommandId.Reset, NandCommandId.ReadId],
+    )
+    def test_cmd_latch(self, cs: int | None, cmd: int):
+        payload: List[int] = CmdBuilder.cmd_latch(cmd, cs)
+
+        assert payload[0x0] == self.cmd0(PioCmdId.CmdLatch, PIN_DIR_WRITE, 1)
+        assert payload[0x1] == Util.bitmerge_cs(cmd, cs)
