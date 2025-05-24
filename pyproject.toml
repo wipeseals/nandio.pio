@@ -13,7 +13,7 @@ dependencies = [
     "svgwrite>=1.4.3",
     "wavedrom>=2.0.3.post3",
 ]
-license = { file = "LICENSE" }
+license-files = ["LICENSE"]
 dynamic = ["version"]
 
 [tool.uv.sources]
@@ -21,7 +21,6 @@ rp2040-pio-emulator = { git = "https://github.com/NathanY3G/rp2040-pio-emulator"
 
 [dependency-groups]
 dev = [
-    "jupyter>=1.1.1",
     "pytest>=8.3.5",
     "ruff>=0.11.11",
     "setuptools-scm>=8.3.1",
@@ -37,7 +36,7 @@ requires = ["setuptools", "wheel", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["nandio-pio"]
+packages = ["src"]
 include-package-data = true
 
 [tool.setuptools_scm]
