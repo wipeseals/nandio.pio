@@ -923,8 +923,8 @@ wheels = [
 
 [[package]]
 name = "nandio-pio"
-version = "0.1.0"
-source = { virtual = "." }
+version = "0.0.post3+dirty"
+source = { editable = "." }
 dependencies = [
     { name = "adafruit-circuitpython-pioasm" },
     { name = "click" },
