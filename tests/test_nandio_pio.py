@@ -152,8 +152,8 @@ class TestPioCmdBuilderSequences:
         assert ret.event_df.iloc[0]["event"] == "cmd_in"
         assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.Reset
         assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
-        assert ret.event_df.iloc[0]["ceb0"] == 0 if cs == 0 else 1
-        assert ret.event_df.iloc[0]["ceb1"] == 0 if cs == 1 else 1
+        assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
+        assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
 
     @pytest.mark.parametrize(
         "cs",
