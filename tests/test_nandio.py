@@ -1,6 +1,13 @@
 import pytest
 from typing import List
-from src.nandio import PIN_DIR_WRITE, PioCmdBuilder, NandCommandId, PioCmdId, Util
+from src.nandio import (
+    PIN_DIR_READ,
+    PIN_DIR_WRITE,
+    PioCmdBuilder,
+    NandCommandId,
+    PioCmdId,
+    Util,
+)
 
 
 class TestPioCmdBuilder:
@@ -67,3 +74,13 @@ class TestPioCmdBuilder:
         assert payload[0x1] == 0x00  # don't care
         for i, addr in enumerate(addrs):
             assert payload[i + 2] == Util.bitor_cs(addr, cs)
+
+    @pytest.mark.parametrize(
+        "data_count",
+        [1, 5, 2048],
+    )
+    def test_data_output(self, data_count: int):
+        payload: List[int] = PioCmdBuilder.data_output(data_count)
+
+        assert payload[0x0] == self.cmd0(PioCmdId.DataOutput, PIN_DIR_READ, data_count)
+        assert payload[0x1] == 0x00  # don't care
