@@ -348,3 +348,15 @@ class PioCmdBuilder:
             *cls.cmd_latch(cmd=NandCommandId.Reset, cs=cs),
             *cls.deassert_cs(),
         ]
+
+    @classmethod
+    def seq_read_id(cls, cs: int, offset: int = 0, data_count: int = 5) -> List[int]:
+        """Read ID sequence for NAND Flash."""
+        return [
+            *cls.init_pin(),
+            *cls.assert_cs(cs=cs),
+            *cls.cmd_latch(cmd=NandCommandId.ReadId, cs=cs),
+            *cls.addr_latch(addrs=[offset], cs=cs),  # Offset for Read ID
+            *cls.data_output(data_count=data_count),
+            *cls.deassert_cs(),
+        ]
