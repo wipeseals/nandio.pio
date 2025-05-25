@@ -98,7 +98,7 @@ class Result:
             json.dumps(self.rx_fifo), encoding="utf-8"
         )
         Path(dst_path / "wave.json").write_text(self.wavedrom_src)
-        self.run_states_df.to_csv(dst_path / "run_states.csv")
+        self.states_df.to_csv(dst_path / "states_df.csv")
         self.event_df.to_csv(dst_path / "event.csv")
         self.wave_svg.saveas(dst_path / "wave.svg")
 
@@ -292,6 +292,9 @@ class Simulator:
                     "ceb1": row["ceb1"],
                     "io": row["io"],
                     "io_dir": row["io_dir"],
+                    # for testing
+                    "io_raw": int(row["io"], 16),
+                    "io_dir_raw": int(row["io_dir"], 16),
                 }
             )
         event_df = pd.DataFrame.from_records(event_src)
@@ -397,6 +400,11 @@ class Simulator:
             ]
         }
 
+    @staticmethod
+    def __example_input_source(clock: int) -> int:
+        """検証用な適当な入力を生成する"""
+        return ((clock // 2) & 0xFF) | (0x8000 if (((clock // 8) % 2) == 1) else 0x0000)
+
     @classmethod
     def execute(
         cls,
@@ -404,9 +412,9 @@ class Simulator:
         test_cycles: int,
         tx_fifo_entries: List[int] = [],
         dequeue_period_cyc: int = 0,
-        # TODO: input pinの挙動をそとから指定できると良い。現状は一定周期でパタパタする
-        input_source: Callable[[int], int] | None = lambda clock: ((clock // 2) & 0xFF)
-        | (0x8000 if (((clock // 8) % 2) == 1) else 0x0000),
+        input_source: Callable[[pioemu.State], int]
+        | Callable[[int], int]
+        | None = None,
     ) -> Result:
         """PIOのsimulationを行う"""
 
@@ -416,7 +424,9 @@ class Simulator:
         emu_generator = pioemu.emulate(
             opcodes=opcodes,
             stop_when=lambda _, state: state.clock > test_cycles,
-            input_source=input_source,
+            input_source=cls.__example_input_source
+            if input_source is None
+            else input_source,
             initial_state=pioemu.State(
                 clock=0,
                 program_counter=0,

@@ -66,26 +66,26 @@ class Util:
         return (high << 16) | low
 
     @classmethod
-    def gen_ceb_bits(cls, select_cs: Optional[int] = None) -> int:
+    def gen_ceb_bits(cls, cs: Optional[int] = None) -> int:
         """cs指定からCEB0/CEB1のピン状態を返す"""
-        if select_cs is None:
+        if cs is None:
             return cls.bit_on(PinAssign.CEB0) | cls.bit_on(PinAssign.CEB1)
-        elif select_cs == 0:
+        elif cs == 0:
             return cls.bit_on(PinAssign.CEB1)
-        elif select_cs == 1:
+        elif cs == 1:
             return cls.bit_on(PinAssign.CEB0)
         else:
-            raise ValueError("select_cs must be 0 or 1 or None")
+            raise ValueError("cs must be 0 or 1 or None")
 
     @classmethod
     def bitor_cs(
-        cls, data_src: Union[int, List[int]], select_cs: Optional[int]
+        cls, data_src: Union[int, List[int]], cs: Optional[int]
     ) -> Union[int, List[int]]:
         """data_srcに対して、csを指定してCEB0/CEB1をセットする。単一変数・リストどちらでも対応"""
         if isinstance(data_src, int):
-            return cls.gen_ceb_bits(select_cs) | data_src
+            return cls.gen_ceb_bits(cs) | data_src
         else:
-            return [cls.gen_ceb_bits(select_cs) | data for data in data_src]
+            return [cls.gen_ceb_bits(cs) | data for data in data_src]
 
 
 # RBB以外全部Outputに設定するpindir値
@@ -200,7 +200,7 @@ class PioCmdBuilder:
     @classmethod
     def assert_cs(
         cls,
-        select_cs: Optional[int] = None,
+        cs: Optional[int] = None,
     ) -> List[int]:
         """Set CEB0/CEB1 pin state."""
         # cmd_1 = { pins_data[9:0] }
@@ -209,20 +209,20 @@ class PioCmdBuilder:
             cmd_id=PioCmdId.Bitbang,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
-            cmd1=Util.bitor_cs(0x00, select_cs),
+            cmd1=Util.bitor_cs(0x00, cs),
         )
 
     @classmethod
     def deassert_cs(cls) -> List[int]:
         """Deassert CEB0/CEB1 pin state."""
         # CS選択なし
-        return cls.assert_cs(select_cs=None)
+        return cls.assert_cs(cs=None)
 
     @classmethod
     def cmd_latch(
         cls,
         cmd: NandCommandId,
-        select_cs: int,
+        cs: int,
     ) -> List[int]:
         """Latch command to NAND Flash."""
         # cmd_1 = { ceb[1:0], nand_cmd_id[7:0] }
@@ -230,21 +230,21 @@ class PioCmdBuilder:
             cmd_id=PioCmdId.CmdLatch,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
-            cmd1=Util.bitor_cs(cmd, select_cs),
+            cmd1=Util.bitor_cs(cmd, cs),
         )
 
     @classmethod
     def addr_latch(
         cls,
         addrs: List[int],
-        select_cs: int,
+        cs: int,
     ) -> List[int]:
         """Latch address to NAND Flash."""
         # cmd_1 = { reserved }
         # data_0, data_1, data_2, ... : { ceb[1:0], addr[7:0] }
 
         # addr に CS bitをmergeする
-        addrs = [Util.bitor_cs(addr, select_cs) for addr in addrs]
+        addrs = [Util.bitor_cs(addr, cs) for addr in addrs]
 
         return [
             *cls.create_cmd_header(
@@ -283,13 +283,13 @@ class PioCmdBuilder:
     def data_input(
         cls,
         datas: List[int],
-        select_cs: int,
+        cs: int,
     ) -> List[int]:
         """Input data to NAND Flash."""
         # cmd_1 = { reserved }
 
         # datas に CS bitをmergeする (PIOをもう一つ利用してbitorするなら省略可)
-        datas = [Util.bitor_cs(data, select_cs) for data in datas]
+        datas = [Util.bitor_cs(data, cs) for data in datas]
         return [
             *cls.data_input_only_header(len(datas)),
             *datas,
@@ -323,28 +323,40 @@ class PioCmdBuilder:
         column_addr: int,
         page_addr: int,
         block_addr: int,
-        select_cs: Optional[int] = None,
+        cs: Optional[int] = None,
     ) -> List[int]:
         """Latch full address to NAND Flash."""
         addrs = NandAddr.create_full_addr(column_addr, page_addr, block_addr)
-        return cls.addr_latch(addrs, select_cs)
+        return cls.addr_latch(addrs, cs)
 
     @classmethod
     def block_addr_latch(
         cls,
         block_addr: int,
-        select_cs: Optional[int] = None,
+        cs: Optional[int] = None,
     ) -> List[int]:
         """Latch block address to NAND Flash."""
         addrs = NandAddr.create_block_addr(block_addr)
-        return cls.addr_latch(addrs, select_cs)
+        return cls.addr_latch(addrs, cs)
 
     @classmethod
     def seq_reset(cls, cs: int) -> List[int]:
         """Reset sequence for NAND Flash."""
         return [
             *cls.init_pin(),
-            *cls.assert_cs(select_cs=cs),
-            *cls.cmd_latch(cmd=NandCommandId.Reset, select_cs=cs),
+            *cls.assert_cs(cs=cs),
+            *cls.cmd_latch(cmd=NandCommandId.Reset, cs=cs),
+            *cls.deassert_cs(),
+        ]
+
+    @classmethod
+    def seq_read_id(cls, cs: int, offset: int = 0, data_count: int = 5) -> List[int]:
+        """Read ID sequence for NAND Flash."""
+        return [
+            *cls.init_pin(),
+            *cls.assert_cs(cs=cs),
+            *cls.cmd_latch(cmd=NandCommandId.ReadId, cs=cs),
+            *cls.addr_latch(addrs=[offset], cs=cs),  # Offset for Read ID
+            *cls.data_output(data_count=data_count),
             *cls.deassert_cs(),
         ]
