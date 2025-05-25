@@ -292,6 +292,9 @@ class Simulator:
                     "ceb1": row["ceb1"],
                     "io": row["io"],
                     "io_dir": row["io_dir"],
+                    # for testing
+                    "io_raw": int(row["io"], 16),
+                    "io_dir_raw": int(row["io_dir"], 16),
                 }
             )
         event_df = pd.DataFrame.from_records(event_src)
