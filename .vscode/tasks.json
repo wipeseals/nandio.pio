@@ -1,0 +1,14 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Run Pytest with uv",
+			"command": "uv run pytest -v",
+			"group": "test",
+			"problemMatcher": [
+				"$python"
+			]
+		}
+	]
+}

@@ -1,5 +1,7 @@
 # NANDIO.PIO
 
+[![pytest with uv](https://github.com/wipeseals/nandio.pio/actions/workflows/test.yml/badge.svg)](https://github.com/wipeseals/nandio.pio/actions/workflows/test.yml)
+
 Accelerating NAND Flash Communication using PIO (Programmable IO).
 
 ## Features
@@ -8,19 +10,19 @@ TODO
 
 ## Installation
 
-TODO
+```bash
+pip install uv
+uv sync --all-extras --dev
+
+# run unit tests
+uv run pytest
+```
 
 ## Usage
 
 ### Simulation
 
 TODO
-
-#### Unit Tests
-
-```bash
-uv run pytest
-```
 
 ### JISC-SSD Board (RP2040 + NAND Flash)
 
