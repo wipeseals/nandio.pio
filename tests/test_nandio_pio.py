@@ -1,6 +1,6 @@
 import pytest
 from typing import List
-from src.nandio import (
+from src.nandio_pio import (
     PIN_DIR_READ,
     PIN_DIR_WRITE,
     PioCmdBuilder,
@@ -83,4 +83,14 @@ class TestPioCmdBuilder:
         payload: List[int] = PioCmdBuilder.data_output(data_count)
 
         assert payload[0x0] == self.cmd0(PioCmdId.DataOutput, PIN_DIR_READ, data_count)
+        assert payload[0x1] == 0x00  # don't care
+
+    @pytest.mark.parametrize(
+        "data_count",
+        [1, 5, 2048],
+    )
+    def test_data_input_only_header(self, data_count: int):
+        payload: List[int] = PioCmdBuilder.data_input_only_header(data_count)
+
+        assert payload[0x0] == self.cmd0(PioCmdId.DataInput, PIN_DIR_WRITE, data_count)
         assert payload[0x1] == 0x00  # don't care
