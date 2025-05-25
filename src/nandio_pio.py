@@ -346,5 +346,5 @@ class PioCmdBuilder:
             *cls.init_pin(),
             *cls.assert_cs(select_cs=cs),
             *cls.cmd_latch(cmd=NandCommandId.Reset, select_cs=cs),
-            *cls.deassert_cs(select_cs=cs),
+            *cls.deassert_cs(),
         ]
