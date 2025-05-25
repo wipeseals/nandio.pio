@@ -10,6 +10,9 @@ TODO
 
 ## Installation
 
+To install the project, you can use the `uv` tool, which is a Python package manager that simplifies the installation of Python projects with multiple dependencies.
+You can install `uv` and the project dependencies using the following commands:
+
 ```bash
 pip install uv
 uv sync --all-extras --dev
@@ -22,7 +25,16 @@ uv run pytest
 
 ### Simulation
 
-TODO
+To simulate the NAND Flash communication, you can use the provided simulation script. This will run the simulation using the `uv` command.
+
+```bash
+uv run src/main.py sim-all
+Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:-- ... 'reset' 100cyc
+Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━  xx% -:--:-- ... 'read_id' 100cyc
+(snip)
+Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
+All simulations completed successfully. output saved to </path/to/output>
+```
 
 ### JISC-SSD Board (RP2040 + NAND Flash)
 
