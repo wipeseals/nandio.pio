@@ -8,7 +8,10 @@ TODO
 
 ## Installation
 
-TODO
+```bash
+pip install uv
+uv sync --all-extras --dev
+```
 
 ## Usage
 
