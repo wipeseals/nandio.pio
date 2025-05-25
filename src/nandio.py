@@ -80,7 +80,7 @@ class Util:
             raise ValueError("select_cs must be 0 or 1 or None")
 
     @classmethod
-    def bitmerge_cs(
+    def bitor_cs(
         cls, data_src: Union[int, List[int]], select_cs: Optional[int]
     ) -> Union[int, List[int]]:
         """data_srcに対して、csを指定してCEB0/CEB1をセットする。単一変数・リストどちらでも対応"""
@@ -168,7 +168,7 @@ class PioCmdId:
     WaitRbb = 0x06
 
 
-class CmdBuilder:
+class PioCmdBuilder:
     """PIO Command Build helper"""
 
     @staticmethod
@@ -196,7 +196,7 @@ class CmdBuilder:
             cmd_id=PioCmdId.Bitbang,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
-            cmd1=Util.bitmerge_cs(0x00, None),
+            cmd1=Util.bitor_cs(0x00, None),
         )
 
     @classmethod
@@ -211,7 +211,7 @@ class CmdBuilder:
             cmd_id=PioCmdId.Bitbang,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
-            cmd1=Util.bitmerge_cs(0x00, select_cs),
+            cmd1=Util.bitor_cs(0x00, select_cs),
         )
 
     @classmethod
@@ -232,7 +232,7 @@ class CmdBuilder:
             cmd_id=PioCmdId.CmdLatch,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
-            cmd1=Util.bitmerge_cs(cmd, select_cs),
+            cmd1=Util.bitor_cs(cmd, select_cs),
         )
 
     @classmethod
@@ -246,17 +246,17 @@ class CmdBuilder:
         # data_0, data_1, data_2, ... : { ceb[1:0], addr[7:0] }
 
         # addr に CS bitをmergeする
-        addrs = [Util.bitmerge_cs(addr, select_cs) for addr in addrs]
+        addrs = [Util.bitor_cs(addr, select_cs) for addr in addrs]
 
-        return list(
-            cls.create_cmd_header(
+        return [
+            *cls.create_cmd_header(
                 cmd_id=PioCmdId.AddrLatch,
                 pindir=PIN_DIR_WRITE,
                 transfer_count=len(addrs),  # number of address bytes
                 cmd1=None,  # don't care
             ),
             *addrs,
-        )
+        ]
 
     @classmethod
     def data_output(cls, data_count: int) -> List[int]:
@@ -291,15 +291,15 @@ class CmdBuilder:
         # cmd_1 = { reserved }
 
         # datas に CS bitをmergeする (PIOをもう一つ利用してbitorするなら省略可)
-        datas = [Util.bitmerge_cs(data, select_cs) for data in datas]
-        return list(
-            cls.data_input_only_header(len(datas)),
+        datas = [Util.bitor_cs(data, select_cs) for data in datas]
+        return [
+            *cls.data_input_only_header(len(datas)),
             *datas,
-        )
+        ]
 
     @classmethod
     def set_irq(cls, irq: int) -> List[int]:
-        """Set IRQ pin state."""
+        """Set IRQ."""
         # cmd_1 = { reserved }
         return cls.create_cmd_header(
             cmd_id=PioCmdId.SetIrq,
@@ -344,9 +344,9 @@ class CmdBuilder:
     @classmethod
     def seq_reset(cls, cs: int) -> List[int]:
         """Reset sequence for NAND Flash."""
-        return list(
+        return [
             *cls.init_pin(),
             *cls.assert_cs(select_cs=cs),
             *cls.cmd_latch(cmd=NandCommandId.Reset, select_cs=cs),
             *cls.deassert_cs(select_cs=cs),
-        )
+        ]
