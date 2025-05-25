@@ -176,27 +176,27 @@ class CmdBuilder:
         cmd_id: PioCmdId,
         pindir: int,
         transfer_count: int,
-        arg0: Optional[int],
+        cmd1: Optional[int],
     ) -> List[int]:
         """コマンドの先頭wordを返す. RShiftで取り出す想定. transfer_countに実際にセットされる値は、pio都合で-1される。"""
         return [
             # cmd_0 = { cmd_id[3:0], transfer_count[11:0], pindirs[15:0] }
             ((cmd_id & 0xF) << 28)
             | ((((transfer_count - 1) & 0x0FFF) << 16) | (pindir & 0xFFFF)),
-            # arg_0 = { arg0[31:0] }
-            arg0 if arg0 is not None else 0x00000000,
+            # cmd_1 = { arg0[31:0] }
+            cmd1 if cmd1 is not None else 0x00000000,
         ]
 
     @classmethod
-    def init_pin(
-        cls,
-    ) -> List[int]:
+    def init_pin(cls) -> List[int]:
         """Initialize pin direction and set transfer count."""
+        # cmd_1 = { pins_data[9:0] }
+        #         { ceb1,ceb0,io7,io6,io5,io4,io3,io2,io1,io0 }
         return cls.create_cmd_header(
             cmd_id=PioCmdId.Bitbang,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
-            arg0=Util.bitmerge_cs(0x00, None),
+            cmd1=Util.bitmerge_cs(0x00, None),
         )
 
     @classmethod
@@ -205,45 +205,148 @@ class CmdBuilder:
         select_cs: Optional[int] = None,
     ) -> List[int]:
         """Set CEB0/CEB1 pin state."""
+        # cmd_1 = { pins_data[9:0] }
+        #         { ceb1,ceb0,io7,io6,io5,io4,io3,io2,io1,io0 }
         return cls.create_cmd_header(
             cmd_id=PioCmdId.Bitbang,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
-            arg0=Util.bitmerge_cs(0x00, select_cs),
+            cmd1=Util.bitmerge_cs(0x00, select_cs),
         )
 
     @classmethod
-    def deassert_cs(
-        cls,
-        select_cs: Optional[int] = None,
-    ) -> List[int]:
+    def deassert_cs(cls) -> List[int]:
         """Deassert CEB0/CEB1 pin state."""
+        # CS選択なし
         return cls.assert_cs(select_cs=None)
 
     @classmethod
     def cmd_latch(
         cls,
         cmd: NandCommandId,
-        select_cs: Optional[int] = None,
+        select_cs: int,
     ) -> List[int]:
         """Latch command to NAND Flash."""
+        # cmd_1 = { ceb[1:0], nand_cmd_id[7:0] }
         return cls.create_cmd_header(
             cmd_id=PioCmdId.CmdLatch,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
-            arg0=Util.bitmerge_cs(cmd, select_cs),
+            cmd1=Util.bitmerge_cs(cmd, select_cs),
         )
+
+    @classmethod
+    def addr_latch(
+        cls,
+        addrs: List[int],
+        select_cs: int,
+    ) -> List[int]:
+        """Latch address to NAND Flash."""
+        # cmd_1 = { reserved }
+        # data_0, data_1, data_2, ... : { ceb[1:0], addr[7:0] }
+
+        # addr に CS bitをmergeする
+        addrs = [Util.bitmerge_cs(addr, select_cs) for addr in addrs]
+
+        return list(
+            cls.create_cmd_header(
+                cmd_id=PioCmdId.AddrLatch,
+                pindir=PIN_DIR_WRITE,
+                transfer_count=len(addrs),  # number of address bytes
+                cmd1=None,  # don't care
+            ),
+            *addrs,
+        )
+
+    @classmethod
+    def data_output(cls, data_count: int) -> List[int]:
+        """Output data from NAND Flash."""
+        # cmd_1 = { reserved }
+
+        return cls.create_cmd_header(
+            cmd_id=PioCmdId.DataOutput,
+            pindir=PIN_DIR_READ,
+            transfer_count=data_count,
+            cmd1=None,  # don't care
+        )
+
+    @classmethod
+    def data_input_only_header(cls, data_count: int) -> List[int]:
+        """Input data header to NAND Flash. (PIOでCS bitorを行う場合向け)"""
+        # cmd_1 = { reserved }
+        return cls.create_cmd_header(
+            cmd_id=PioCmdId.DataInput,
+            pindir=PIN_DIR_WRITE,
+            transfer_count=data_count,
+            cmd1=None,  # don't care
+        )
+
+    @classmethod
+    def data_input(
+        cls,
+        datas: List[int],
+        select_cs: int,
+    ) -> List[int]:
+        """Input data to NAND Flash."""
+        # cmd_1 = { reserved }
+
+        # datas に CS bitをmergeする (PIOをもう一つ利用してbitorするなら省略可)
+        datas = [Util.bitmerge_cs(data, select_cs) for data in datas]
+        return list(
+            cls.data_input_only_header(len(datas)),
+            *datas,
+        )
+
+    @classmethod
+    def set_irq(cls, irq: int) -> List[int]:
+        """Set IRQ pin state."""
+        # cmd_1 = { reserved }
+        return cls.create_cmd_header(
+            cmd_id=PioCmdId.SetIrq,
+            pindir=PIN_DIR_WRITE,
+            transfer_count=1,  # don't care
+            cmd1=irq,
+        )
+
+    @classmethod
+    def wait_rbb(cls) -> List[int]:
+        """Wait for RBB pin to be low."""
+        # cmd_1 = { reserved }
+        return cls.create_cmd_header(
+            cmd_id=PioCmdId.WaitRbb,
+            pindir=PIN_DIR_READ,
+            transfer_count=1,  # don't care
+            cmd1=None,
+        )
+
+    @classmethod
+    def full_addr_latch(
+        cls,
+        column_addr: int,
+        page_addr: int,
+        block_addr: int,
+        select_cs: Optional[int] = None,
+    ) -> List[int]:
+        """Latch full address to NAND Flash."""
+        addrs = NandAddr.create_full_addr(column_addr, page_addr, block_addr)
+        return cls.addr_latch(addrs, select_cs)
+
+    @classmethod
+    def block_addr_latch(
+        cls,
+        block_addr: int,
+        select_cs: Optional[int] = None,
+    ) -> List[int]:
+        """Latch block address to NAND Flash."""
+        addrs = NandAddr.create_block_addr(block_addr)
+        return cls.addr_latch(addrs, select_cs)
 
     @classmethod
     def seq_reset(cls, cs: int) -> List[int]:
         """Reset sequence for NAND Flash."""
         return list(
-            itertools.chain.from_iterable(
-                [
-                    cls.init_pin(),
-                    cls.assert_cs(select_cs=cs),
-                    cls.cmd_latch(cmd=NandCommandId.Reset, select_cs=cs),
-                    cls.deassert_cs(select_cs=cs),
-                ]
-            )
+            *cls.init_pin(),
+            *cls.assert_cs(select_cs=cs),
+            *cls.cmd_latch(cmd=NandCommandId.Reset, select_cs=cs),
+            *cls.deassert_cs(select_cs=cs),
         )
