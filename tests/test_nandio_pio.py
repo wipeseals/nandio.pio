@@ -117,3 +117,15 @@ class TestPioCmdBuilder:
         for i, data in enumerate(datas):
             # CS が追加されたデータを転送するはず
             assert payload[i + 2] == Util.bitor_cs(data, cs)
+
+    def test_set_irq(self):
+        payload: List[int] = PioCmdBuilder.set_irq()
+
+        assert payload[0x0] == self.cmd0(PioCmdId.SetIrq, PIN_DIR_WRITE, 1)
+        assert payload[0x1] == 0x00
+
+    def test_wait_rbb(self):
+        payload: List[int] = PioCmdBuilder.wait_rbb()
+
+        assert payload[0x0] == self.cmd0(PioCmdId.WaitRbb, PIN_DIR_WRITE, 1)
+        assert payload[0x1] == 0x00
