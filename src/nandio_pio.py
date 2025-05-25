@@ -296,14 +296,14 @@ class PioCmdBuilder:
         ]
 
     @classmethod
-    def set_irq(cls, irq: int) -> List[int]:
+    def set_irq(cls) -> List[int]:
         """Set IRQ."""
         # cmd_1 = { reserved }
         return cls.create_cmd_header(
             cmd_id=PioCmdId.SetIrq,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
-            cmd1=irq,
+            cmd1=None,
         )
 
     @classmethod
@@ -312,7 +312,7 @@ class PioCmdBuilder:
         # cmd_1 = { reserved }
         return cls.create_cmd_header(
             cmd_id=PioCmdId.WaitRbb,
-            pindir=PIN_DIR_READ,
+            pindir=PIN_DIR_WRITE,
             transfer_count=1,  # don't care
             cmd1=None,
         )
