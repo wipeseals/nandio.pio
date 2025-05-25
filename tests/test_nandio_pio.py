@@ -181,14 +181,14 @@ class TestPioCmdBuilderSequences:
         assert ret.event_df.iloc[0]["event"] == "cmd_in"
         assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.ReadId
         assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
-        assert ret.event_df.iloc[0]["ceb0"] == 0 if cs == 0 else 1
-        assert ret.event_df.iloc[0]["ceb1"] == 0 if cs == 1 else 1
+        assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
+        assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
         # Addr In
         assert ret.event_df.iloc[1]["event"] == "addr_in"
         assert ret.event_df.iloc[1]["io_raw"] == offset
         assert ret.event_df.iloc[1]["io_dir_raw"] == 0xFF
-        assert ret.event_df.iloc[1]["ceb0"] == 0 if cs == 0 else 1
-        assert ret.event_df.iloc[1]["ceb1"] == 0 if cs == 1 else 1
+        assert ret.event_df.iloc[1]["ceb0"] == (0 if cs == 0 else 1)
+        assert ret.event_df.iloc[1]["ceb1"] == (0 if cs == 1 else 1)
         # Data Output
         for i in range(data_count):
             assert ret.event_df.iloc[i + 2]["event"] == "data_out"
