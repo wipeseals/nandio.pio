@@ -73,6 +73,7 @@ class TestPioCmdBuilder:
         assert payload[0x0] == self.cmd0(PioCmdId.AddrLatch, PIN_DIR_WRITE, len(addrs))
         assert payload[0x1] == 0x00  # don't care
         for i, addr in enumerate(addrs):
+            # CS が追加されたデータを転送するはず
             assert payload[i + 2] == Util.bitor_cs(addr, cs)
 
     @pytest.mark.parametrize(
@@ -94,3 +95,25 @@ class TestPioCmdBuilder:
 
         assert payload[0x0] == self.cmd0(PioCmdId.DataInput, PIN_DIR_WRITE, data_count)
         assert payload[0x1] == 0x00  # don't care
+
+    @pytest.mark.parametrize(
+        "cs",
+        [0, 1],
+    )
+    @pytest.mark.parametrize(
+        "datas",
+        [
+            [0xAA, 0x99, 0x55, 0x66],
+            [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88],
+            list(range(512)),
+            list(range(2048)),
+        ],
+    )
+    def test_data_input(self, cs: int, datas: List[int]):
+        payload: List[int] = PioCmdBuilder.data_input(datas, cs)
+
+        assert payload[0x0] == self.cmd0(PioCmdId.DataInput, PIN_DIR_WRITE, len(datas))
+        assert payload[0x1] == 0x00  # don't care
+        for i, data in enumerate(datas):
+            # CS が追加されたデータを転送するはず
+            assert payload[i + 2] == Util.bitor_cs(data, cs)
