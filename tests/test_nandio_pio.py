@@ -1,3 +1,4 @@
+from pathlib import Path
 import pytest
 from typing import List
 from src.nandio_pio import (
@@ -8,9 +9,10 @@ from src.nandio_pio import (
     PioCmdId,
     Util,
 )
+from src.simulator import Result, Simulator
 
 
-class TestPioCmdBuilder:
+class TestPioCmdBuilderBasics:
     @staticmethod
     def cmd0(
         cmd: PioCmdId,
@@ -129,3 +131,26 @@ class TestPioCmdBuilder:
 
         assert payload[0x0] == self.cmd0(PioCmdId.WaitRbb, PIN_DIR_WRITE, 1)
         assert payload[0x1] == 0x00
+
+
+class TestPioCmdBuilderSequences:
+    def setup_class(self):
+        self.pio_text = Path("nandio.pio").read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize(
+        "cs",
+        [0, 1],
+    )
+    def test_seq_reset(self, cs: int):
+        payload: List[int] = PioCmdBuilder.seq_reset(cs)
+        ret: Result = Simulator.execute(
+            program_str=self.pio_text,
+            test_cycles=100,
+            tx_fifo_entries=payload,
+        )
+
+        assert ret.event_df.iloc[0]["event"] == "cmd_in"
+        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.Reset
+        assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
+        assert ret.event_df.iloc[0]["ceb0"] == 0 if cs == 0 else 1
+        assert ret.event_df.iloc[0]["ceb1"] == 0 if cs == 1 else 1
