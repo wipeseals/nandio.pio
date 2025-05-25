@@ -22,7 +22,6 @@ rp2040-pio-emulator = { git = "https://github.com/NathanY3G/rp2040-pio-emulator"
 
 [dependency-groups]
 dev = [
-    "jupyter>=1.1.1",
     "pytest>=8.3.5",
     "ruff>=0.11.11",
     "setuptools-scm>=8.3.1",
