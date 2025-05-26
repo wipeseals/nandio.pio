@@ -3,8 +3,8 @@
 	"tasks": [
 		{
 			"type": "shell",
-			"label": "Run sim-all with uv",
-			"command": "uv run src/main.py sim-all",
+			"label": "sim --all",
+			"command": "uv run src/main.py sim --all",
 			"group": "test",
 			"problemMatcher": [
 				"$python"
@@ -12,7 +12,7 @@
 		},
 		{
 			"type": "shell",
-			"label": "Run Pytest with uv",
+			"label": "pytest",
 			"command": "uv run pytest -v",
 			"group": "test",
 			"problemMatcher": [
