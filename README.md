@@ -28,12 +28,19 @@ uv run pytest
 To simulate the NAND Flash communication, you can use the provided simulation script. This will run the simulation using the `uv` command.
 
 ```bash
-uv run src/main.py sim-all
-Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:-- ... 'reset' 100cyc
+# All scenarios
+uv run src/main.py sim --all
+Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:-- ... 'reset' 40cyc
 Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━  xx% -:--:-- ... 'read_id' 100cyc
 (snip)
 Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
 All simulations completed successfully. output saved to </path/to/output>
+
+# Specific scenario
+uv run src/main.py sim --scenario reset
+Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:-- ... 'reset' 40cyc
+Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
+All simulations completed successfully. output saved to E:\repos\nandio.pio\output
 ```
 
 ### JISC-SSD Board (RP2040 + NAND Flash)
