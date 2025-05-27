@@ -52,9 +52,9 @@ To assemble the PIO program, you can use the `uv` command with the `assemble` op
 
 ```bash
 uv run src/main.py assemble
-PIO program assembled successfully: <path/to/output>
-[9ca0, 7c90, 7c2c, 7c44, 9ca0, 1c88, 7c0a, 1c00, 1c8c, 750a, b542, 1d00, 1c91, 96a0, 760a, 1e4d, 1c00, 1c98, ac42, ac42, 5c08, 9c20, 1c52, 1c00, 1c9f, 94a0, 740a, 1c59, 1c00, dc00, 1c00, 3c8f]
-
+PIO program assembled successfully: binary=</path/to/nandio.bin>, python=</path/to/nandio.py>
+import array
+PIO_OPCODES: array.array = array('H', [40096, 31888, 31788, 31812, 40096, 7304, 31754, 7168, 7308, 29962, 46402, 7424, 7313, 38560, 30218, 7757, 7168, 7320, 44098, 44098, 23560, 39968, 7250, 7168, 7327, 38048, 29706, 7257, 7168, 56320, 7168, 15503])
 ```
 
 ### JISC-SSD Board (RP2040 + NAND Flash)
