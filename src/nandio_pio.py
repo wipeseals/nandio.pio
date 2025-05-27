@@ -346,7 +346,9 @@ class PioCmdBuilder:
             *cls.init_pin(),
             *cls.assert_cs(cs=cs),
             *cls.cmd_latch(cmd=NandCommandId.Reset, cs=cs),
+            *cls.wait_rbb(),
             *cls.deassert_cs(),
+            *cls.set_irq(),
         ]
 
     @classmethod
@@ -359,4 +361,5 @@ class PioCmdBuilder:
             *cls.addr_latch(addrs=[offset], cs=cs),  # Offset for Read ID
             *cls.data_output(data_count=data_count),
             *cls.deassert_cs(),
+            *cls.set_irq(),
         ]
