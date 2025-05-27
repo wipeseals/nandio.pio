@@ -196,5 +196,69 @@ class TestPioCmdBuilderSequences:
                 ret.event_df.iloc[i + 2]["io_raw"] == ret.received_from_rx_fifo[i]
             )  # created random value from the simulator
             assert ret.event_df.iloc[i + 2]["io_dir_raw"] == 0x00  # read
-            assert ret.event_df.iloc[i + 2]["ceb0"] == 0 if cs == 0 else 1
-            assert ret.event_df.iloc[i + 2]["ceb1"] == 0 if cs == 1 else 1
+            assert ret.event_df.iloc[i + 2]["ceb0"] == (0 if cs == 0 else 1)
+            assert ret.event_df.iloc[i + 2]["ceb1"] == (0 if cs == 1 else 1)
+
+    @pytest.mark.parametrize(
+        "cs,column_addr,page_addr,block_addr,data_count",
+        [
+            (0, 0, 0, 0, 1),
+            (1, 0, 0, 3, 8),
+            (0, 1, 0, 0, 5),
+            (1, 1024, 0, 128, 10),
+            (0, 128, 33, 256, 15),
+            (1, 256, 2, 3, 512),
+            (0, 0, 0, 0, 2048),
+            (1, 512, 16, 1023, 2048),
+        ],
+    )
+    def test_seq_read(
+        self,
+        cs: int,
+        column_addr: int,
+        page_addr: int,
+        block_addr: int,
+        data_count: int,
+    ):
+        payload: List[int] = PioCmdBuilder.seq_read(
+            cs, column_addr, page_addr, block_addr, data_count
+        )
+        ret: Result = Simulator.execute(
+            program_str=self.pio_text,
+            test_cycles=100 + data_count * 10,
+            tx_fifo_entries=payload,
+        )
+
+        # read 1st cycle
+        assert ret.event_df.iloc[0]["event"] == "cmd_in"
+        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.Read1stCycle
+        assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
+        assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
+        assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
+        # address input
+        # 1st cycle: col[7:0]
+        # 2nd cycle  col[11:8]
+        # 3rd cycle: page[7:0] (block[1:0], page_in_block[5:0])
+        # 4th cycle: page[11:8] (block[9:2])
+        expect_addrs = [
+            column_addr & 0xFF,  # col[7:0]
+            (column_addr >> 8) & 0x0F,  # col[11:8]
+            (page_addr & 0xFF) | ((block_addr & 0x03) << 6),  # page[7:0] + block[1:0]
+            (block_addr >> 2) & 0xFF,  # block[9:2]
+        ]
+        for i in range(len(expect_addrs)):
+            assert ret.event_df.iloc[i + 1]["event"] == "addr_in"
+            assert ret.event_df.iloc[i + 1]["io_raw"] == expect_addrs[i]
+            assert ret.event_df.iloc[i + 1]["io_dir_raw"] == 0xFF
+            assert ret.event_df.iloc[i + 1]["ceb0"] == (0 if cs == 0 else 1)
+            assert ret.event_df.iloc[i + 1]["ceb1"] == (0 if cs == 1 else 1)
+        # Read 2nd cycle
+        assert ret.event_df.iloc[5]["event"] == "cmd_in"
+        assert ret.event_df.iloc[5]["io_raw"] == NandCommandId.Read2ndCycle
+        assert ret.event_df.iloc[5]["io_dir_raw"] == 0xFF
+        assert ret.event_df.iloc[5]["ceb0"] == (0 if cs == 0 else 1)
+        assert ret.event_df.iloc[5]["ceb1"] == (0 if cs == 1 else 1)
+        # Data Output
+        for i in range(data_count):
+            assert ret.event_df.iloc[i + 6]["event"] == "data_out"
+            assert ret.event_df.iloc[i + 6]["io_raw"] == ret.received_from_rx_fifo[i]
