@@ -1,4 +1,5 @@
 import array
+import os
 import adafruit_pioasm
 from dataclasses import dataclass
 from typing import List
@@ -88,13 +89,13 @@ def cli(
     type=click.Path(exists=True, path_type=Path),
 )
 @click.option(
-    "--hex_str_path",
+    "--py_path",
     type=click.Path(exists=True, path_type=Path),
 )
 def assemble(
     pio_path: Path,
     bin_path: Path | None = None,
-    hex_str_path: Path | None = None,
+    py_path: Path | None = None,
 ):
     """Assemble the PIO program."""
     if not pio_path.exists():
@@ -102,18 +103,21 @@ def assemble(
         return
     if bin_path is None:
         bin_path = pio_path.with_suffix(".bin")
-    if hex_str_path is None:
-        hex_str_path = pio_path.with_suffix(".txt")
+    if py_path is None:
+        py_path = pio_path.with_suffix(".py")
 
     program_str = Path(pio_path).read_text(encoding="utf-8")
     opcodes: array.array = adafruit_pioasm.assemble(program_str)
     # save binary output
-    hex_str = "[" + ", ".join(f"{byte:#02x}" for byte in opcodes) + "]"
+    py_str = f"import array{os.linesep}PIO_OPCODES: array.array = {opcodes}"
     bin_path.write_bytes(opcodes.tobytes())
-    hex_str_path.write_text(hex_str, encoding="utf-8")
+    py_path.write_text(py_str, encoding="utf-8")
 
-    click.secho(f"PIO program assembled successfully: {bin_path.absolute()}")
-    click.secho(hex_str)
+    click.secho(
+        f"PIO program assembled successfully: binary={bin_path.absolute()}, python={py_path.absolute()}",
+        fg="green",
+    )
+    click.secho(py_str)
 
 
 @cli.command()
