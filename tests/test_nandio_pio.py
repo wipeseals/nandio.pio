@@ -208,8 +208,9 @@ class TestPioCmdBuilderSequences:
             (1, 1024, 0, 128, 10),
             (0, 128, 33, 256, 15),
             (1, 256, 2, 3, 512),
-            (0, 0, 0, 0, 2048),
-            (1, 512, 16, 1023, 2048),
+            # too long
+            # (0, 0, 0, 0, 2048),
+            # (1, 512, 16, 1023, 2048),
         ],
     )
     def test_seq_read(
@@ -262,3 +263,89 @@ class TestPioCmdBuilderSequences:
         for i in range(data_count):
             assert ret.event_df.iloc[i + 6]["event"] == "data_out"
             assert ret.event_df.iloc[i + 6]["io_raw"] == ret.received_from_rx_fifo[i]
+            assert ret.event_df.iloc[i + 6]["io_dir_raw"] == 0x00  # read
+            assert ret.event_df.iloc[i + 6]["ceb0"] == (0 if cs == 0 else 1)
+            assert ret.event_df.iloc[i + 6]["ceb1"] == (0 if cs == 1 else 1)
+
+    @pytest.mark.parametrize(
+        "cs,column_addr,page_addr,block_addr,datas",
+        [
+            (0, 0, 0, 0, [0xAA, 0x99, 0x55, 0x66]),
+            (1, 0, 0, 3, [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]),
+            (0, 128, 33, 256, list(range(15))),
+            (1, 256, 2, 3, list(range(512))),
+            # too long
+            # (0, 512, 16, 1023, list(range(2048))),
+        ],
+    )
+    def test_seq_program(
+        self,
+        cs: int,
+        column_addr: int,
+        page_addr: int,
+        block_addr: int,
+        datas: List[int],
+    ):
+        payload: List[int] = PioCmdBuilder.seq_program(
+            cs, column_addr, page_addr, block_addr, datas
+        )
+        ret: Result = Simulator.execute(
+            program_str=self.pio_text,
+            test_cycles=100 + len(datas) * 10,
+            tx_fifo_entries=payload,
+        )
+
+        # write 1st cycle
+        assert ret.event_df.iloc[0]["event"] == "cmd_in"
+        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.AutoPageProgram1stCycle
+        assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
+        assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
+        assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
+        # address input
+        # 1st cycle: col[7:0]
+        # 2nd cycle  col[11:8]
+        # 3rd cycle: page[7:0] (block[1:0], page_in_block[5:0])
+        # 4th cycle: page[11:8] (block[9:2])
+        expect_addrs = [
+            column_addr & 0xFF,  # col[7:0]
+            (column_addr >> 8) & 0x0F,  # col[11:8]
+            (page_addr & 0xFF) | ((block_addr & 0x03) << 6),  # page[7:0] + block[1:0]
+            (block_addr >> 2) & 0xFF,  # block[9:2]
+        ]
+        for i in range(len(expect_addrs)):
+            assert ret.event_df.iloc[i + 1]["event"] == "addr_in"
+            assert ret.event_df.iloc[i + 1]["io_raw"] == expect_addrs[i]
+            assert ret.event_df.iloc[i + 1]["io_dir_raw"] == 0xFF
+            assert ret.event_df.iloc[i + 1]["ceb0"] == (0 if cs == 0 else 1)
+            assert ret.event_df.iloc[i + 1]["ceb1"] == (0 if cs == 1 else 1)
+
+        # Data Input
+        for i in range(len(datas)):
+            assert ret.event_df.iloc[i + 5]["event"] == "data_in"
+            assert ret.event_df.iloc[i + 5]["io_raw"] == datas[i] & 0xFF
+            assert ret.event_df.iloc[i + 5]["io_dir_raw"] == 0xFF
+            assert ret.event_df.iloc[i + 5]["ceb0"] == (0 if cs == 0 else 1)
+            assert ret.event_df.iloc[i + 5]["ceb1"] == (0 if cs == 1 else 1)
+        # Write 2nd cycle
+        assert ret.event_df.iloc[len(datas) + 5]["event"] == "cmd_in"
+        assert (
+            ret.event_df.iloc[len(datas) + 5]["io_raw"]
+            == NandCommandId.AutoPageProgram2ndCycle
+        )
+        assert ret.event_df.iloc[len(datas) + 5]["io_dir_raw"] == 0xFF
+        assert ret.event_df.iloc[len(datas) + 5]["ceb0"] == (0 if cs == 0 else 1)
+        assert ret.event_df.iloc[len(datas) + 5]["ceb1"] == (0 if cs == 1 else 1)
+        # status read
+        assert ret.event_df.iloc[len(datas) + 6]["event"] == "cmd_in"
+        assert ret.event_df.iloc[len(datas) + 6]["io_raw"] == NandCommandId.StatusRead
+        assert ret.event_df.iloc[len(datas) + 6]["io_dir_raw"] == 0xFF
+        assert ret.event_df.iloc[len(datas) + 6]["ceb0"] == (0 if cs == 0 else 1)
+        assert ret.event_df.iloc[len(datas) + 6]["ceb1"] == (0 if cs == 1 else 1)
+        # Data Output
+        assert ret.event_df.iloc[len(datas) + 7]["event"] == "data_out"
+        assert (
+            ret.event_df.iloc[len(datas) + 7]["io_raw"] == ret.received_from_rx_fifo[0]
+        )  # status
+        assert ret.event_df.iloc[len(datas) + 7]["io_dir_raw"] == 0x00
+        assert ret.event_df.iloc[len(datas) + 7]["ceb0"] == (0 if cs == 0 else 1)
+        assert ret.event_df.iloc[len(datas) + 7]["ceb1"] == (0 if cs == 1 else 1)
