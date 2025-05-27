@@ -1,4 +1,5 @@
 import array
+import datetime
 import os
 import adafruit_pioasm
 from dataclasses import dataclass
@@ -109,7 +110,7 @@ def asm(
     program_str = Path(pio_path).read_text(encoding="utf-8")
     opcodes: array.array = adafruit_pioasm.assemble(program_str)
     # save binary output
-    py_str = f"import array{os.linesep}PIO_OPCODES: array.array = {opcodes}"
+    py_str = f"# generated from {pio_path.name}. created_at={datetime.datetime.now()}\nimport array{os.linesep}PIO_OPCODES: array.array = {opcodes}"
     bin_path.write_bytes(opcodes.tobytes())
     py_path.write_text(py_str, encoding="utf-8")
 
