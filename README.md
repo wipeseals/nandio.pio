@@ -43,7 +43,18 @@ All simulations completed successfully. output saved to </path/to/output>
 uv run src/main.py sim --scenario reset
 Simulating scenario... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:-- ... 'reset' 40cyc
 Simulating scenario... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
-All simulations completed successfully. output saved to E:\repos\nandio.pio\output
+All simulations completed successfully. output saved to <path/to/output>
+```
+
+### assembly
+
+To assemble the PIO program, you can use the `uv` command with the `assemble` option. This will compile the PIO assembly code into a binary format that can be used by the Raspberry Pi Pico.
+
+```bash
+uv run src/main.py assemble
+PIO program assembled successfully: <path/to/output>
+[9ca0, 7c90, 7c2c, 7c44, 9ca0, 1c88, 7c0a, 1c00, 1c8c, 750a, b542, 1d00, 1c91, 96a0, 760a, 1e4d, 1c00, 1c98, ac42, ac42, 5c08, 9c20, 1c52, 1c00, 1c9f, 94a0, 740a, 1c59, 1c00, dc00, 1c00, 3c8f]
+
 ```
 
 ### JISC-SSD Board (RP2040 + NAND Flash)
