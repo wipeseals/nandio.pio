@@ -166,7 +166,7 @@ wheels = [
 
 [[package]]
 name = "nandio-pio"
-version = "0.0.post49+dirty"
+version = "0.0.post78+dirty"
 source = { editable = "." }
 dependencies = [
     { name = "adafruit-circuitpython-pioasm" },

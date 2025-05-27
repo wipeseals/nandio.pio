@@ -1,5 +1,11 @@
+import array
+import datetime
+import json
+import os
+import adafruit_pioasm
 from dataclasses import dataclass
 from typing import List
+import rich
 import rich_click as click
 from pathlib import Path
 import logging
@@ -8,6 +14,8 @@ from src.nandio_pio import PioCmdBuilder
 from rich.progress import Progress
 
 from src.simulator import Result, Simulator
+
+console = rich.get_console()
 
 
 @dataclass
@@ -25,8 +33,32 @@ class SimScenario:
 
 
 SCENARIOS: List[SimScenario] = [
-    SimScenario("reset", PioCmdBuilder.seq_reset(cs=0), test_cycles=40),
+    SimScenario("reset", PioCmdBuilder.seq_reset(cs=0), test_cycles=100),
     SimScenario("read_id", PioCmdBuilder.seq_read_id(cs=0), test_cycles=100),
+    SimScenario(
+        "read",
+        PioCmdBuilder.seq_read(
+            cs=0, column_addr=0, page_addr=0, block_addr=1023, data_count=32
+        ),
+        test_cycles=300,
+    ),
+    SimScenario(
+        "program",
+        PioCmdBuilder.seq_program(
+            cs=0,
+            column_addr=0,
+            page_addr=0,
+            block_addr=1023,
+            data=list(range(32)),
+        ),
+        test_cycles=300,
+    ),
+    SimScenario(
+        "erase",
+        PioCmdBuilder.seq_erase(cs=0, block_addr=1023),
+        test_cycles=200,
+    ),
+    SimScenario("status_read", PioCmdBuilder.seq_status_read(cs=0), test_cycles=30),
 ]
 
 
@@ -47,6 +79,48 @@ def cli(
         datefmt="[%X]",
         handlers=[RichHandler(rich_tracebacks=True)],
     )
+
+
+@cli.command()
+@click.option(
+    "--pio_path",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    default="nandio.pio",
+)
+@click.option(
+    "--bin_path",
+    type=click.Path(exists=True, path_type=Path),
+)
+@click.option(
+    "--py_path",
+    type=click.Path(exists=True, path_type=Path),
+)
+def asm(
+    pio_path: Path,
+    bin_path: Path | None = None,
+    py_path: Path | None = None,
+):
+    """Assemble the PIO program."""
+    if not pio_path.exists():
+        console.print(f"[red]PIO file {pio_path} does not exist.[/red]")
+        return
+    if bin_path is None:
+        bin_path = pio_path.with_suffix(".bin")
+    if py_path is None:
+        py_path = pio_path.with_suffix(".py")
+
+    program_str = Path(pio_path).read_text(encoding="utf-8")
+    opcodes: array.array = adafruit_pioasm.assemble(program_str)
+    # save binary output
+    py_str = f"# generated from {pio_path.name}. created_at={datetime.datetime.now()}\nimport array{os.linesep}PIO_OPCODES: array.array = {opcodes}"
+    bin_path.write_bytes(opcodes.tobytes())
+    py_path.write_text(py_str, encoding="utf-8")
+
+    console.print(
+        f"[green]PIO program assembled successfully: binary={bin_path.absolute()}, python={py_path.absolute()}[/green]"
+    )
+    console.print(f"```python{os.linesep}{py_str}{os.linesep}```")
 
 
 @cli.command()
@@ -85,17 +159,15 @@ def sim(
     if scenario:
         target_scenarios = [s for s in SCENARIOS if s.name == scenario]
     if not target_scenarios:
-        click.secho(
-            "No scenarios selected. Use --all to run all scenarios or --scenario to specify one.",
-            fg="red",
+        console.print(
+            "[red]No scenarios selected. Use --all to run all scenarios or --scenario to specify one.[/red]"
         )
         return
 
     with Progress() as progress:
-        task = progress.add_task(
-            "Simulating all scenarios...", total=len(target_scenarios)
-        )
+        task = progress.add_task("Simulating scenario...", total=len(target_scenarios))
         for scenario in target_scenarios:
+            logging.debug(f"Running scenario: {scenario}")
             ret: Result = Simulator.execute(
                 program_str=program_str,
                 test_cycles=scenario.test_cycles,
@@ -104,9 +176,13 @@ def sim(
             output_dir = output_path / scenario.name
             output_dir.mkdir(parents=True, exist_ok=True)
             ret.save(output_dir)
-            click.secho(f" ... '{scenario.name}' {scenario.test_cycles}cyc")
             progress.advance(task)
-    click.secho(
+
+    # simulation summary
+    scenario_names: dict[str, str] = [s.name for s in target_scenarios]
+    (output_path / "summary.json").write_text(json.dumps(scenario_names, indent=4))
+    console.print(f"Simulation completed for scenarios: {', '.join(scenario_names)}")
+    console.print(
         f"All simulations completed successfully. output saved to {output_path.absolute()}"
     )
 
