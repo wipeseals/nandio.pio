@@ -268,6 +268,28 @@ class TestPioCmdBuilderSequences:
             assert ret.event_df.iloc[i + 6]["ceb1"] == (0 if cs == 1 else 1)
 
     @pytest.mark.parametrize(
+        "cs",
+        [0, 1],
+    )
+    def test_seq_read_status(self, cs: int):
+        payload: List[int] = PioCmdBuilder.seq_status_read(cs)
+        ret: Result = Simulator.execute(
+            program_str=self.pio_text,
+            test_cycles=50,
+            tx_fifo_entries=payload,
+        )
+
+        # Read Status
+        assert ret.event_df.iloc[0]["event"] == "cmd_in"
+        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.StatusRead
+        assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
+        assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
+        assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
+        # Data Output
+        assert ret.event_df.iloc[1]["event"] == "data_out"
+        assert ret.event_df.iloc[1]["io_raw"] == ret.received_from_rx_fifo[0]
+
+    @pytest.mark.parametrize(
         "cs,column_addr,page_addr,block_addr,datas",
         [
             (0, 0, 0, 0, [0xAA, 0x99, 0x55, 0x66]),
