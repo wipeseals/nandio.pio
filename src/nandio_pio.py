@@ -387,6 +387,21 @@ class PioCmdBuilder:
         ]
 
     @classmethod
+    def seq_status_read(
+        cls,
+        cs: int,
+    ) -> List[int]:
+        """Read status sequence for NAND Flash."""
+        return [
+            *cls.init_pin(),
+            *cls.assert_cs(cs=cs),
+            *cls.cmd_latch(cmd=NandCommandId.StatusRead, cs=cs),
+            *cls.data_output(data_count=1),  # Status read
+            *cls.deassert_cs(),
+            *cls.set_irq(),
+        ]
+
+    @classmethod
     def seq_program(
         cls,
         cs: int,
@@ -409,7 +424,7 @@ class PioCmdBuilder:
             *cls.deassert_cs(),
             *cls.set_irq(),
         ]
-    
+
     @classmethod
     def seq_erase(
         cls,
