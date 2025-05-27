@@ -10,6 +10,50 @@ from rich.progress import Progress
 from src.simulator import Result, Simulator
 
 
+@dataclass
+class SimScenario:
+    name: str
+    payload: list[int]
+    test_cycles: int = 100
+
+    def execute(self, program_str: str) -> Result:
+        return Simulator.execute(
+            program_str=program_str,
+            test_cycles=self.test_cycles,
+            tx_fifo_entries=self.payload,
+        )
+
+
+SCENARIOS: List[SimScenario] = [
+    SimScenario("reset", PioCmdBuilder.seq_reset(cs=0), test_cycles=40),
+    SimScenario("read_id", PioCmdBuilder.seq_read_id(cs=0), test_cycles=100),
+    SimScenario(
+        "read",
+        PioCmdBuilder.seq_read(
+            cs=0, column_addr=0, page_addr=0, block_addr=1023, data_count=32
+        ),
+        test_cycles=300,
+    ),
+    SimScenario(
+        "program",
+        PioCmdBuilder.seq_program(
+            cs=0,
+            column_addr=0,
+            page_addr=0,
+            block_addr=1023,
+            data=list(range(32)),
+        ),
+        test_cycles=300,
+    ),
+    SimScenario(
+        "erase",
+        PioCmdBuilder.seq_erase(cs=0, block_addr=1023),
+        test_cycles=200,
+    ),
+    SimScenario("status_read", PioCmdBuilder.seq_status_read(cs=0), test_cycles=30),
+]
+
+
 @click.group()
 @click.option(
     "--log_level",
@@ -27,7 +71,6 @@ def cli(
         datefmt="[%X]",
         handlers=[RichHandler(rich_tracebacks=True)],
     )
-    pass
 
 
 @cli.command()
@@ -44,33 +87,39 @@ def cli(
     default="output",
 )
 @click.option(
-    "--cs",
-    required=True,
-    type=int,
-    default=0,
+    "--all",
+    is_flag=True,
+    help="Run all simulation scenarios",
 )
-def sim_all(
+@click.option(
+    "--scenario",
+    type=click.Choice([s.name for s in SCENARIOS]),
+    help="Run a specific simulation scenario",
+)
+def sim(
     pio_path: Path,
     output_path: Path,
-    cs: int,
+    all: bool = False,
+    scenario: str | None = None,
 ):
     """Simulate all PioCmdBuilder sequences."""
 
-    @dataclass
-    class SimScenario:
-        name: str
-        payload: list[int]
-        test_cycles: int = 100
-
     program_str = Path(pio_path).read_text(encoding="utf-8")
-    scenarios: List[SimScenario] = [
-        SimScenario("reset", PioCmdBuilder.seq_reset(cs=cs), test_cycles=40),
-        SimScenario("read_id", PioCmdBuilder.seq_read_id(cs=cs), test_cycles=100),
-    ]
+    target_scenarios = SCENARIOS if all else []
+    if scenario:
+        target_scenarios = [s for s in SCENARIOS if s.name == scenario]
+    if not target_scenarios:
+        click.secho(
+            "No scenarios selected. Use --all to run all scenarios or --scenario to specify one.",
+            fg="red",
+        )
+        return
 
     with Progress() as progress:
-        task = progress.add_task("Simulating all scenarios...", total=len(scenarios))
-        for scenario in scenarios:
+        task = progress.add_task(
+            "Simulating all scenarios...", total=len(target_scenarios)
+        )
+        for scenario in target_scenarios:
             ret: Result = Simulator.execute(
                 program_str=program_str,
                 test_cycles=scenario.test_cycles,
