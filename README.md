@@ -30,19 +30,19 @@ To simulate the NAND Flash communication, you can use the provided simulation sc
 ```bash
 # All scenarios
 uv run src/main.py sim --all
-Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:-- ... 'reset' 40cyc
-Simulating all scenarios... ━━━━━━╸━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  17% -:--:-- ... 'read_id' 100cyc
-Simulating all scenarios... ━━━━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━  33% 0:00:02 ... 'read' 300cyc
-Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━  50% 0:00:02 ... 'program' 300cyc
-Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━╸━━━━━━━━━━━━━  67% 0:00:02 ... 'erase' 200cyc
-Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╺━━━━━━  83% 0:00:01 ... 'status_read' 30cyc
-Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
+Simulating scenario... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:-- ... 'reset' 40cyc
+Simulating scenario... ━━━━━━╸━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  17% -:--:-- ... 'read_id' 100cyc
+Simulating scenario... ━━━━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━  33% 0:00:02 ... 'read' 300cyc
+Simulating scenario... ━━━━━━━━━━━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━  50% 0:00:02 ... 'program' 300cyc
+Simulating scenario... ━━━━━━━━━━━━━━━━━━━━━━━━━━╸━━━━━━━━━━━━━  67% 0:00:02 ... 'erase' 200cyc
+Simulating scenario... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╺━━━━━━  83% 0:00:01 ... 'status_read' 30cyc
+Simulating scenario... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
 All simulations completed successfully. output saved to </path/to/output>
 
 # Specific scenario
 uv run src/main.py sim --scenario reset
-Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:-- ... 'reset' 40cyc
-Simulating all scenarios... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
+Simulating scenario... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:-- ... 'reset' 40cyc
+Simulating scenario... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
 All simulations completed successfully. output saved to E:\repos\nandio.pio\output
 ```
 

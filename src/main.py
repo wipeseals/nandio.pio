@@ -116,9 +116,7 @@ def sim(
         return
 
     with Progress() as progress:
-        task = progress.add_task(
-            "Simulating all scenarios...", total=len(target_scenarios)
-        )
+        task = progress.add_task("Simulating scenario...", total=len(target_scenarios))
         for scenario in target_scenarios:
             ret: Result = Simulator.execute(
                 program_str=program_str,
