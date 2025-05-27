@@ -409,3 +409,23 @@ class PioCmdBuilder:
             *cls.deassert_cs(),
             *cls.set_irq(),
         ]
+    
+    @classmethod
+    def seq_erase(
+        cls,
+        cs: int,
+        block_addr: int,
+    ) -> List[int]:
+        """Erase sequence for NAND Flash."""
+        return [
+            *cls.init_pin(),
+            *cls.assert_cs(cs=cs),
+            *cls.cmd_latch(cmd=NandCommandId.AutoBlockErase1stCycle, cs=cs),
+            *cls.block_addr_latch(block_addr, cs),
+            *cls.cmd_latch(cmd=NandCommandId.AutoBlockErase2ndCycle, cs=cs),
+            *cls.wait_rbb(),
+            *cls.cmd_latch(cmd=NandCommandId.StatusRead, cs=cs),
+            *cls.data_output(data_count=1),  # Status read
+            *cls.deassert_cs(),
+            *cls.set_irq(),
+        ]
