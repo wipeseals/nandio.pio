@@ -363,3 +363,25 @@ class PioCmdBuilder:
             *cls.deassert_cs(),
             *cls.set_irq(),
         ]
+
+    @classmethod
+    def seq_read(
+        cls,
+        cs: int,
+        column_addr: int,
+        page_addr: int,
+        block_addr: int,
+        data_count: int,
+    ) -> List[int]:
+        """Read sequence for NAND Flash."""
+        return [
+            *cls.init_pin(),
+            *cls.assert_cs(cs=cs),
+            *cls.cmd_latch(cmd=NandCommandId.Read1stCycle, cs=cs),
+            *cls.full_addr_latch(column_addr, page_addr, block_addr, cs),
+            *cls.cmd_latch(cmd=NandCommandId.Read2ndCycle, cs=cs),
+            *cls.wait_rbb(),
+            *cls.data_output(data_count=data_count),
+            *cls.deassert_cs(),
+            *cls.set_irq(),
+        ]
