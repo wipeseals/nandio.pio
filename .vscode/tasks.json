@@ -4,7 +4,7 @@
 		{
 			"type": "shell",
 			"label": "assemble",
-			"command": "uv run src/main.py assemble",
+			"command": "uv run src/main.py asm",
 			"group": "build",
 			"problemMatcher": [
 				"$python"

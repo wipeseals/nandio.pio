@@ -48,10 +48,10 @@ All simulations completed successfully. output saved to <path/to/output>
 
 ### assembly
 
-To assemble the PIO program, you can use the `uv` command with the `assemble` option. This will compile the PIO assembly code into a binary format that can be used by the Raspberry Pi Pico.
+To assemble the PIO program, you can use the `uv` command with the `asm` option. This will compile the PIO assembly code into a binary format that can be used by the Raspberry Pi Pico.
 
 ```bash
-uv run src/main.py assemble
+uv run src/main.py asm
 PIO program assembled successfully: binary=</path/to/nandio.bin>, python=</path/to/nandio.py>
 import array
 PIO_OPCODES: array.array = array('H', [40096, 31888, 31788, 31812, 40096, 7304, 31754, 7168, 7308, 29962, 46402, 7424, 7313, 38560, 30218, 7757, 7168, 7320, 44098, 44098, 23560, 39968, 7250, 7168, 7327, 38048, 29706, 7257, 7168, 56320, 7168, 15503])

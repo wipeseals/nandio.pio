@@ -92,7 +92,7 @@ def cli(
     "--py_path",
     type=click.Path(exists=True, path_type=Path),
 )
-def assemble(
+def asm(
     pio_path: Path,
     bin_path: Path | None = None,
     py_path: Path | None = None,
