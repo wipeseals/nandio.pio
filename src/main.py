@@ -27,6 +27,30 @@ class SimScenario:
 SCENARIOS: List[SimScenario] = [
     SimScenario("reset", PioCmdBuilder.seq_reset(cs=0), test_cycles=40),
     SimScenario("read_id", PioCmdBuilder.seq_read_id(cs=0), test_cycles=100),
+    SimScenario(
+        "read",
+        PioCmdBuilder.seq_read(
+            cs=0, column_addr=0, page_addr=0, block_addr=1023, data_count=32
+        ),
+        test_cycles=300,
+    ),
+    SimScenario(
+        "program",
+        PioCmdBuilder.seq_program(
+            cs=0,
+            column_addr=0,
+            page_addr=0,
+            block_addr=1023,
+            data=list(range(32)),
+        ),
+        test_cycles=300,
+    ),
+    SimScenario(
+        "erase",
+        PioCmdBuilder.seq_erase(cs=0, block_addr=1023),
+        test_cycles=200,
+    ),
+    SimScenario("status_read", PioCmdBuilder.seq_status_read(cs=0), test_cycles=30),
 ]
 
 
