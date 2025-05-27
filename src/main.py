@@ -1,5 +1,8 @@
+import array
+import adafruit_pioasm
 from dataclasses import dataclass
 from typing import List
+import rich
 import rich_click as click
 from pathlib import Path
 import logging
@@ -71,6 +74,46 @@ def cli(
         datefmt="[%X]",
         handlers=[RichHandler(rich_tracebacks=True)],
     )
+
+
+@cli.command()
+@click.option(
+    "--pio_path",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    default="nandio.pio",
+)
+@click.option(
+    "--bin_path",
+    type=click.Path(exists=True, path_type=Path),
+)
+@click.option(
+    "--hex_str_path",
+    type=click.Path(exists=True, path_type=Path),
+)
+def assemble(
+    pio_path: Path,
+    bin_path: Path | None = None,
+    hex_str_path: Path | None = None,
+):
+    """Assemble the PIO program."""
+    if not pio_path.exists():
+        click.secho(f"PIO file {pio_path} does not exist.", fg="red")
+        return
+    if bin_path is None:
+        bin_path = pio_path.with_suffix(".bin")
+    if hex_str_path is None:
+        hex_str_path = pio_path.with_suffix(".txt")
+
+    program_str = Path(pio_path).read_text(encoding="utf-8")
+    opcodes: array.array = adafruit_pioasm.assemble(program_str)
+    # save binary output
+    hex_str = "[" + ", ".join(f"{byte:02x}" for byte in opcodes) + "]"
+    bin_path.write_bytes(opcodes.tobytes())
+    hex_str_path.write_text(hex_str, encoding="utf-8")
+
+    click.secho(f"PIO program assembled successfully: {bin_path.absolute()}")
+    click.secho(hex_str)
 
 
 @cli.command()
