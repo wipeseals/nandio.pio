@@ -108,7 +108,7 @@ def assemble(
     program_str = Path(pio_path).read_text(encoding="utf-8")
     opcodes: array.array = adafruit_pioasm.assemble(program_str)
     # save binary output
-    hex_str = "[" + ", ".join(f"{byte:02x}" for byte in opcodes) + "]"
+    hex_str = "[" + ", ".join(f"{byte:#02x}" for byte in opcodes) + "]"
     bin_path.write_bytes(opcodes.tobytes())
     hex_str_path.write_text(hex_str, encoding="utf-8")
 
