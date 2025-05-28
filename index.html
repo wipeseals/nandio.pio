@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>nandio.pio simulation result</title>
+    <script src="https://unpkg.com/vue@3"></script>
+  </head>
+  <body>
+    <div id="app">
+      <h1><a href="https://github.com/wipeseals/nandio.pio">NANDIO.PIO</a> Simulation Result</h1>
+      <p>
+        This page shows the simulation result of <a href="https://github.com/wipeseals/nandio.pio">wipeseals/nandio.pio</a> on the simulator.
+      </p>
+      <ul>
+        <li v-for="r in results">
+          <h2>{{ r.name }}</h2>
+          <h3>event</h3>
+          <ul>
+            <li v-if="r.event.length === 0">[empty]</li>
+            <li v-else v-for="e in r.event">{{ e }}</li>
+          </ul>
+          <h3>tx_fifo</h3>
+          <ul>
+            <li v-if="r.tx_fifo.length === 0">[empty]</li>
+            <li v-else v-for="t in r.tx_fifo">0x{{ t.toString(16) }}</li>
+          </ul>
+          <h3>rx_fifo</h3>
+            <ul>
+            <li v-if="r.rx_fifo.length === 0">[empty]</li>
+                <li v-else v-for="r in r.rx_fifo">0x{{ r.toString(16) }}</li>
+            </ul>
+          <h3>wave</h3>
+          <img :src="r.wave" />
+          <h3>states</h3>
+            <ul>
+                <li v-if="r.states.length === 0">[empty]</li>
+                <li v-else v-for="s in r.states">{{ s }}</li>
+            </ul>
+        </li>
+      </ul>
+      <div v-if="error">{{ error }}</div>
+    </div>
+
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>

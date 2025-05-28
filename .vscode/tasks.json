@@ -3,6 +3,15 @@
 	"tasks": [
 		{
 			"type": "shell",
+			"label": "assemble",
+			"command": "uv run src/main.py asm",
+			"group": "build",
+			"problemMatcher": [
+				"$python"
+			]
+		},
+		{
+			"type": "shell",
 			"label": "sim --all",
 			"command": "uv run src/main.py sim --all",
 			"group": "test",
