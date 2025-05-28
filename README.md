@@ -39,6 +39,9 @@ All simulations completed successfully. output saved to </path/to/output>
 uv run src/main.py sim --scenario reset
 ```
 
+You can view the simulation results on GitHub Pages:  
+<https://wipeseals.github.io/nandio.pio/>
+
 ### assembly
 
 To assemble the PIO program, you can use the `uv` command with the `asm` option. This will compile the PIO assembly code into a binary format that can be used by the Raspberry Pi Pico.
