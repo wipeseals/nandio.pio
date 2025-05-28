@@ -4,16 +4,16 @@ import json
 import os
 import adafruit_pioasm
 from dataclasses import dataclass
-from typing import List
+from typing import Callable, List
 import rich
 import rich_click as click
 from pathlib import Path
 import logging
 from rich.logging import RichHandler
-from src.nandio_pio import PioCmdBuilder
+from sim.nandio_pio import PioCmdBuilder
 from rich.progress import Progress
 
-from src.simulator import Result, Simulator
+from sim.simulator import Result, Simulator
 
 console = rich.get_console()
 
@@ -21,44 +21,37 @@ console = rich.get_console()
 @dataclass
 class SimScenario:
     name: str
-    payload: list[int]
+    payload_f: Callable[[array.array], None]
     test_cycles: int = 100
 
-    def execute(self, program_str: str) -> Result:
-        return Simulator.execute(
-            program_str=program_str,
-            test_cycles=self.test_cycles,
-            tx_fifo_entries=self.payload,
-        )
-
-
 SCENARIOS: List[SimScenario] = [
-    SimScenario("reset", PioCmdBuilder.seq_reset(cs=0), test_cycles=100),
-    SimScenario("read_id", PioCmdBuilder.seq_read_id(cs=0), test_cycles=100),
+    SimScenario("reset", lambda arr: PioCmdBuilder.seq_reset(arr=arr, cs=0), test_cycles=100),
+    SimScenario("read_id", lambda arr: PioCmdBuilder.seq_read_id(arr=arr, cs=0), test_cycles=100),
     SimScenario(
         "read",
-        PioCmdBuilder.seq_read(
-            cs=0, column_addr=0, page_addr=0, block_addr=1023, data_count=32
+        lambda arr: PioCmdBuilder.seq_read(
+            arr=arr, cs=0, column_addr=0, page_addr=0, block_addr=1023, data_count=32
         ),
         test_cycles=300,
     ),
     SimScenario(
         "program",
-        PioCmdBuilder.seq_program(
+        lambda arr: PioCmdBuilder.seq_program(
+            arr=arr,
             cs=0,
             column_addr=0,
             page_addr=0,
             block_addr=1023,
-            data=list(range(32)),
+            data=array.array('I', range(32)),  # dataもarray.arrayで渡す
         ),
         test_cycles=300,
     ),
     SimScenario(
         "erase",
-        PioCmdBuilder.seq_erase(cs=0, block_addr=1023),
+        lambda arr: PioCmdBuilder.seq_erase(arr=arr, cs=0, block_addr=1023),
         test_cycles=200,
     ),
-    SimScenario("status_read", PioCmdBuilder.seq_status_read(cs=0), test_cycles=30),
+    SimScenario("status_read", lambda arr: PioCmdBuilder.seq_status_read(arr=arr, cs=0), test_cycles=50),
 ]
 
 
@@ -168,10 +161,13 @@ def sim(
         task = progress.add_task("Simulating scenario...", total=len(target_scenarios))
         for scenario in target_scenarios:
             logging.debug(f"Running scenario: {scenario}")
+            # payload_fにarray.arrayを渡してtx_fifo_entriesを生成
+            tx_fifo_entries = array.array('I')
+            scenario.payload_f(tx_fifo_entries)
             ret: Result = Simulator.execute(
                 program_str=program_str,
                 test_cycles=scenario.test_cycles,
-                tx_fifo_entries=scenario.payload,
+                tx_fifo_entries=tx_fifo_entries,
             )
             output_dir = output_path / scenario.name
             output_dir.mkdir(parents=True, exist_ok=True)

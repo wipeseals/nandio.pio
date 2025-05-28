@@ -1,11 +1,15 @@
 {
-    "editor.formatOnType": true,
-    "[python]": {
-        "editor.defaultFormatter": "charliermarsh.ruff",
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportMissingModuleSource": "none"
     },
-    "python.testing.pytestArgs": [
-        "tests"
+    "python.terminal.activateEnvironment": false,
+    "micropico.openOnStart": true,
+    "python.analysis.typeshedPaths": [
+        "~/.micropico-stubs/included"
     ],
-    "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
+    "python.analysis.extraPaths": [
+        "~/.micropico-stubs/included"
+    ]
 }

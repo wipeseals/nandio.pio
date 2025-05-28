@@ -23,6 +23,7 @@ createApp({
           states: await (await fetch(`${basePath}${name}/states.json`)).json(),
           tx_fifo: await (await fetch(`${basePath}${name}/tx_fifo.json`)).json(),
           rx_fifo: await (await fetch(`${basePath}${name}/rx_fifo.json`)).json(),
+          received_from_rx_fifo: await (await fetch(`${basePath}${name}/received_from_rx_fifo.json`)).json(),
         }))
       );
       console.log(this.results);

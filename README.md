@@ -30,13 +30,13 @@ To simulate the NAND Flash communication, you can use the provided simulation sc
 
 ```bash
 # All scenarios
-uv run src/main.py sim --all
+uv run sim/cli.py sim --all
 Simulating scenario... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
 Simulation completed for scenarios: reset, read_id, read, program, erase, status_read
 All simulations completed successfully. output saved to </path/to/output>
 
 # Specific scenario
-uv run src/main.py sim --scenario reset
+uv run sim/cli.py sim --scenario reset
 ```
 
 You can view the simulation results on GitHub Pages:  
@@ -47,7 +47,7 @@ You can view the simulation results on GitHub Pages:
 To assemble the PIO program, you can use the `uv` command with the `asm` option. This will compile the PIO assembly code into a binary format that can be used by the Raspberry Pi Pico.
 
 ```bash
-uv run src/main.py asm
+uv run sim/cli.py asm
 PIO program assembled successfully: binary=</path/to/nandio.bin>, python=</path/to/nandio.py>
 import array
 PIO_OPCODES: array.array = array('H', [40096, 31888, 31788, 31812, 40096, 7304, 31754, 7168, 7308, 29962, 46402, 7424, 7313, 38560, 30218, 7757, 7168, 7320, 44098, 44098, 23560, 39968, 7250, 7168, 7327, 38048, 29706, 7257, 7168, 56320, 7168, 15503])

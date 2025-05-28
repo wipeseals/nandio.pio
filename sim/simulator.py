@@ -79,11 +79,11 @@ class Result:
 
     program_str: str
     test_cycles: int
-    tx_fifo_entries: List[int]
     states_df: pd.DataFrame
     event_df: pd.DataFrame
-    rx_fifo: List[int]
     received_from_rx_fifo: List[int]
+    tx_fifo: List[int]
+    rx_fifo: List[int]
     wavedrom_src: str
     wave_svg: svgwrite.drawing.Drawing
 
@@ -91,11 +91,17 @@ class Result:
         """結果を指定されたパスに保存する"""
 
         dst_path.mkdir(exist_ok=True)
+
+        # 各種データを保存
+        (dst_path / "program.txt").write_text(self.program_str, encoding="utf-8")
         (dst_path / "tx_fifo.json").write_text(
-            json.dumps(self.tx_fifo_entries), encoding="utf-8"
+            json.dumps(self.tx_fifo), encoding="utf-8"
         )
         (dst_path / "rx_fifo.json").write_text(
             json.dumps(self.rx_fifo), encoding="utf-8"
+        )
+        (dst_path / "received_from_rx_fifo.json").write_text(
+            json.dumps(self.received_from_rx_fifo), encoding="utf-8"
         )
         Path(dst_path / "wave.json").write_text(self.wavedrom_src)
         self.states_df.to_csv(dst_path / "states.csv")
@@ -412,13 +418,18 @@ class Simulator:
         cls,
         program_str: str,
         test_cycles: int,
-        tx_fifo_entries: List[int] = [],
-        dequeue_period_cyc: int = 0,
+        tx_fifo_entries: List[int] | array.array = [],
+        # dequeue が速すぎると、simulator上のFIFOが常に空になってしまう
+        dequeue_period_cyc: int = 8, 
         input_source: Callable[[pioemu.State], int]
         | Callable[[int], int]
         | None = None,
     ) -> Result:
         """PIOのsimulationを行う"""
+
+        # tx_fifo_entries が array.array の場合は List[int] に変換
+        if isinstance(tx_fifo_entries, array.array):
+            tx_fifo_entries = list(tx_fifo_entries)
 
         # pio textをアセンブルして、opcodesを生成
         opcodes: array.array = adafruit_pioasm.assemble(program_str)
@@ -472,7 +483,7 @@ class Simulator:
         return Result(
             program_str=program_str,
             test_cycles=test_cycles,
-            tx_fifo_entries=tx_fifo_entries,
+            tx_fifo=tx_fifo_entries,
             states_df=states_df,
             event_df=event_df,
             rx_fifo=rx_fifo,
