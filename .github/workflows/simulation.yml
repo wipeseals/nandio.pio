@@ -3,7 +3,7 @@ name: simulation with uv
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   test:
