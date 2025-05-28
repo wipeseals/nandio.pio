@@ -1,15 +1,16 @@
-name: pytest
+name: simulation
 
 on:
   workflow_dispatch:
   push:
-    branches: [master, develop]
-  pull_request:
     branches: [master]
 
 jobs:
-  test:
+  simulation:
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - name: Set up uv
@@ -24,5 +25,7 @@ jobs:
           python-version-file: "pyproject.toml"
       - name: Install dependencies
         run: uv sync --all-extras --dev
-      - name: Run tests
-        run: uv run pytest -v
+      - name: Run simulation
+        run: uv run src/main.py sim --all
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

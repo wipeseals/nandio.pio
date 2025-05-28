@@ -1,6 +1,7 @@
 # NANDIO.PIO
 
-[![pytest with uv](https://github.com/wipeseals/nandio.pio/actions/workflows/test.yml/badge.svg)](https://github.com/wipeseals/nandio.pio/actions/workflows/test.yml)
+[![pytest](https://github.com/wipeseals/nandio.pio/actions/workflows/test.yml/badge.svg)](https://github.com/wipeseals/nandio.pio/actions/workflows/test.yml)
+[![simulation](https://github.com/wipeseals/nandio.pio/actions/workflows/simulation.yml/badge.svg)](https://github.com/wipeseals/nandio.pio/actions/workflows/simulation.yml)
 
 Accelerating NAND Flash Communication using PIO (Programmable IO).
 
@@ -37,6 +38,9 @@ All simulations completed successfully. output saved to </path/to/output>
 # Specific scenario
 uv run src/main.py sim --scenario reset
 ```
+
+You can view the simulation results on GitHub Pages:  
+<https://wipeseals.github.io/nandio.pio/>
 
 ### assembly
 
