@@ -24,6 +24,9 @@ jobs:
         run: uv sync --all-extras --dev
       - name: Run simulation
         run: uv run src/main.py sim --all
+      - name: Ready Web files
+        run: |
+          git add --force output
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
