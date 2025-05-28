@@ -1,5 +1,6 @@
 import array
 import datetime
+import json
 import os
 import adafruit_pioasm
 from dataclasses import dataclass
@@ -176,6 +177,11 @@ def sim(
             output_dir.mkdir(parents=True, exist_ok=True)
             ret.save(output_dir)
             progress.advance(task)
+
+    # simulation summary
+    scenario_names: dict[str, str] = [s.name for s in target_scenarios]
+    (output_path / "summary.json").write_text(json.dumps(scenario_names, indent=4))
+    console.print(f"Simulation completed for scenarios: {', '.join(scenario_names)}")
     console.print(
         f"All simulations completed successfully. output saved to {output_path.absolute()}"
     )
