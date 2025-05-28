@@ -34,6 +34,7 @@
             <ul>
                 <li v-if="r.states.length === 0">[empty]</li>
                 <li v-else v-for="s in r.states">{{ s }}</li>
+            </ul>
         </li>
       </ul>
       <div v-if="error">{{ error }}</div>
