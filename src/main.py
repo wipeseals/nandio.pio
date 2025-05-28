@@ -33,7 +33,7 @@ class SimScenario:
 
 
 SCENARIOS: List[SimScenario] = [
-    SimScenario("reset", PioCmdBuilder.seq_reset(cs=0), test_cycles=40),
+    SimScenario("reset", PioCmdBuilder.seq_reset(cs=0), test_cycles=100),
     SimScenario("read_id", PioCmdBuilder.seq_read_id(cs=0), test_cycles=100),
     SimScenario(
         "read",
