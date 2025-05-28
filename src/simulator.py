@@ -98,8 +98,10 @@ class Result:
             json.dumps(self.rx_fifo), encoding="utf-8"
         )
         Path(dst_path / "wave.json").write_text(self.wavedrom_src)
-        self.states_df.to_csv(dst_path / "states_df.csv")
+        self.states_df.to_csv(dst_path / "states.csv")
         self.event_df.to_csv(dst_path / "event.csv")
+        self.states_df.to_json(dst_path / "states.json", orient="records")
+        self.event_df.to_json(dst_path / "event.json", orient="records")
         self.wave_svg.saveas(dst_path / "wave.svg")
 
 
