@@ -1,4 +1,4 @@
-name: pytest with uv
+name: pytest
 
 on:
   workflow_dispatch:

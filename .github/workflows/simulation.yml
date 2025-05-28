@@ -1,4 +1,4 @@
-name: simulation with uv
+name: simulation
 
 on:
   workflow_dispatch:
