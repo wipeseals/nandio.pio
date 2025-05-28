@@ -14,6 +14,8 @@ from rich.progress import Progress
 
 from src.simulator import Result, Simulator
 
+console = rich.get_console()
+
 
 @dataclass
 class SimScenario:
@@ -100,7 +102,7 @@ def asm(
 ):
     """Assemble the PIO program."""
     if not pio_path.exists():
-        click.secho(f"PIO file {pio_path} does not exist.", fg="red")
+        console.print(f"[red]PIO file {pio_path} does not exist.[/red]")
         return
     if bin_path is None:
         bin_path = pio_path.with_suffix(".bin")
@@ -114,11 +116,10 @@ def asm(
     bin_path.write_bytes(opcodes.tobytes())
     py_path.write_text(py_str, encoding="utf-8")
 
-    click.secho(
-        f"PIO program assembled successfully: binary={bin_path.absolute()}, python={py_path.absolute()}",
-        fg="green",
+    console.print(
+        f"[green]PIO program assembled successfully: binary={bin_path.absolute()}, python={py_path.absolute()}[/green]"
     )
-    click.secho(py_str)
+    console.print(f"```python{os.linesep}{py_str}{os.linesep}```")
 
 
 @cli.command()
@@ -157,15 +158,15 @@ def sim(
     if scenario:
         target_scenarios = [s for s in SCENARIOS if s.name == scenario]
     if not target_scenarios:
-        click.secho(
-            "No scenarios selected. Use --all to run all scenarios or --scenario to specify one.",
-            fg="red",
+        console.print(
+            "[red]No scenarios selected. Use --all to run all scenarios or --scenario to specify one.[/red]"
         )
         return
 
     with Progress() as progress:
         task = progress.add_task("Simulating scenario...", total=len(target_scenarios))
         for scenario in target_scenarios:
+            logging.debug(f"Running scenario: {scenario}")
             ret: Result = Simulator.execute(
                 program_str=program_str,
                 test_cycles=scenario.test_cycles,
@@ -174,9 +175,8 @@ def sim(
             output_dir = output_path / scenario.name
             output_dir.mkdir(parents=True, exist_ok=True)
             ret.save(output_dir)
-            click.secho(f" ... '{scenario.name}' {scenario.test_cycles}cyc")
             progress.advance(task)
-    click.secho(
+    console.print(
         f"All simulations completed successfully. output saved to {output_path.absolute()}"
     )
 
