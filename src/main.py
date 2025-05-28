@@ -179,7 +179,7 @@ def sim(
             progress.advance(task)
 
     # simulation summary
-    scenario_names: dict[str, str] = [s.name for s in target_scenarios]
+    scenario_names: List[str] = [s.name for s in target_scenarios]
     (output_path / "summary.json").write_text(json.dumps(scenario_names, indent=4))
     console.print(f"Simulation completed for scenarios: {', '.join(scenario_names)}")
     console.print(
