@@ -5,6 +5,7 @@ import array
 from src.nandio_pio import (
     PIN_DIR_READ,
     PIN_DIR_WRITE,
+    NandAddr,
     PioCmdBuilder,
     NandCommandId,
     PioCmdId,
@@ -12,6 +13,16 @@ from src.nandio_pio import (
 )
 from src.simulator import Result, Simulator
 
+class TestNandAddr:
+    @pytest.mark.parametrize(
+        "column_addr,page_addr,block_addr,expect",
+        [
+            (0, 0, 0, [0x00, 0x00, 0x00, 0x00]),
+            (0b10101010, 0, 0, [0b10101010, 0x00, 0x00, 0x00]),
+        ],
+    )
+    def test_create_full_addr(self, column_addr: int, page_addr: int, block_addr: int, expect: List[int]):
+        assert NandAddr.create_full_addr(column_addr, page_addr, block_addr) == expect
 
 class TestPioCmdBuilderBasics:
     @staticmethod
