@@ -97,6 +97,7 @@ class Util:
 PIN_DIR_WRITE: int = (
     Util.bit_on(PinAssign.REB)
     | Util.bit_on(PinAssign.WEB)
+    | Util.bit_on(PinAssign.WPB)
     | Util.bit_on(PinAssign.ALE)
     | Util.bit_on(PinAssign.CLE)
     | Util.bit_on(PinAssign.CEB1)
