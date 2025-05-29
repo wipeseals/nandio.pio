@@ -419,7 +419,8 @@ class Simulator:
         program_str: str,
         test_cycles: int,
         tx_fifo_entries: List[int] = [],
-        dequeue_period_cyc: int = 8,
+        # dequeue が速すぎると、simulator上のFIFOが常に空になってしまう
+        dequeue_period_cyc: int = 8, 
         input_source: Callable[[pioemu.State], int]
         | Callable[[int], int]
         | None = None,
