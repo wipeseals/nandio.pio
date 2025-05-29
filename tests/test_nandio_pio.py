@@ -19,11 +19,28 @@ class TestNandAddr:
         [
             (0, 0, 0, [0x00, 0x00, 0x00, 0x00]),
             (0b10101010, 0, 0, [0b10101010, 0x00, 0x00, 0x00]),
+            (0b1101_00000000, 0, 0, [0x00, 0b00001101, 0x00, 0x00]),
+            (0, 0b101010, 0, [0x00, 0x00, 0b101010, 0x00]),
+            (0, 0, 0b10101010, [0x00, 0x00, 0x00, 0b10101010]),
         ],
     )
     def test_create_full_addr(self, column_addr: int, page_addr: int, block_addr: int, expect: List[int]):
         arr = array.array("I", [0, 0, 0, 0])
         NandAddr.create_full_addr(arr, column_addr, page_addr, block_addr)
+        assert arr.tolist() == expect
+
+    @pytest.mark.parametrize(
+        "block_addr,expect",
+        [
+            (0, [0x00, 0x00]),
+            (0b10101010, [0b10101010, 0x00]),
+            (0b10101010_00000000, [0x00, 0b10101010]),
+            (0xffff, [0xff, 0xff]),
+        ],
+    )
+    def test_create_block_addr(self, block_addr: int, expect: List[int]):
+        arr = array.array("I", [0, 0])
+        NandAddr.create_block_addr(arr, block_addr)
         assert arr.tolist() == expect
 
 class TestPioCmdBuilderBasics:
