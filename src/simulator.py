@@ -418,7 +418,7 @@ class Simulator:
         cls,
         program_str: str,
         test_cycles: int,
-        tx_fifo_entries: List[int] = [],
+        tx_fifo_entries: List[int] | array.array = [],
         # dequeue が速すぎると、simulator上のFIFOが常に空になってしまう
         dequeue_period_cyc: int = 8, 
         input_source: Callable[[pioemu.State], int]
@@ -426,6 +426,10 @@ class Simulator:
         | None = None,
     ) -> Result:
         """PIOのsimulationを行う"""
+
+        # tx_fifo_entries が array.array の場合は List[int] に変換
+        if isinstance(tx_fifo_entries, array.array):
+            tx_fifo_entries = list(tx_fifo_entries)
 
         # pio textをアセンブルして、opcodesを生成
         opcodes: array.array = adafruit_pioasm.assemble(program_str)
