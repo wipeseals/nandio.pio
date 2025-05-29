@@ -80,13 +80,17 @@ class Util:
 
     @classmethod
     def bitor_cs(
-        cls, data_src: Union[int, List[int]], cs: Optional[int]
-    ) -> Union[int, List[int]]:
-        """data_srcに対して、csを指定してCEB0/CEB1をセットする。単一変数・リストどちらでも対応"""
+        cls, data_src: int | array.array, cs: Optional[int]
+    ) -> int | array.array:
+        """data_srcに対して、csを指定してCEB0/CEB1をセットする。単一変数・arrayどちらでも対応。arrayの場合は内容を変更する。"""
         if isinstance(data_src, int):
             return cls.gen_ceb_bits(cs) | data_src
+        elif isinstance(data_src, array.array):
+            for i in range(len(data_src)):
+                data_src[i] = cls.gen_ceb_bits(cs) | data_src[i]
+            return data_src
         else:
-            return [cls.gen_ceb_bits(cs) | data for data in data_src]
+            raise TypeError("data_src must be int, list, or array.array type")
 
 
 # RBB以外全部Outputに設定するpindir値
@@ -122,8 +126,8 @@ PIN_DIR_READ: int = (
 class NandAddr:
     @staticmethod
     def create_full_addr(
-        column_addr: int, page_addr: int, block_addr: int
-    ) -> List[int]:
+        arr: array.array, column_addr: int, page_addr: int, block_addr: int
+    ) -> None:
         """アドレスをNAND Flashの指定フォーマットに変換する。Schematic Cell Layout and Address Assignment参照
 
         |              | I/O7 | I/O6 | I/O5 | I/O4 | I/O3 | I/O2 | I/O1 | I/O0 |
@@ -139,20 +143,17 @@ class NandAddr:
         """
         ca = column_addr & 0xFFF
         pa = (page_addr & 0x3F) | ((block_addr & 0x3FF) << 6)
-        return [
-            ca & 0xFF,
-            (ca >> 8) & 0x0F,
-            pa & 0xFF,
-            (pa >> 8) & 0xFF,
-        ]
+        arr[0] = ca & 0xFF
+        arr[1] = (ca >> 8) & 0x0F
+        arr[2] = pa & 0xFF
+        arr[3] = (pa >> 8) & 0xFF
 
     @staticmethod
-    def create_block_addr(block_addr: int) -> List[int]:
+    def create_block_addr(arr: array.array, block_addr: int) -> None:
         """Block Addressを2byteのAddressInput用に変換する。Auto Block Erase用。"""
-        return [
-            block_addr & 0xFF,
-            (block_addr >> 8) & 0xFF,
-        ]
+
+        arr[0] = block_addr & 0xFF
+        arr[1] = (block_addr >> 8) & 0xFF
 
 
 class PioCmdId:
@@ -236,11 +237,11 @@ class PioCmdBuilder:
     def addr_latch(
         cls,
         arr: array.array,
-        addrs: List[int],
+        addrs: array.array,
         cs: int,
     ) -> None:
         """Latch address to NAND Flash."""
-        addrs = [Util.bitor_cs(addr, cs) for addr in addrs]
+        Util.bitor_cs(addrs, cs)  # Ensure addresses are modified with CS
         cls.create_cmd_header(
             cmd_id=PioCmdId.AddrLatch,
             pindir=PIN_DIR_WRITE,
@@ -276,13 +277,13 @@ class PioCmdBuilder:
     def data_input(
         cls,
         arr: array.array,
-        datas: List[int],
+        data: array.array ,
         cs: int,
     ) -> None:
         """Input data to NAND Flash."""
-        datas = [Util.bitor_cs(data, cs) for data in datas]
-        cls.data_input_only_header(arr, len(datas))
-        arr.extend(datas)
+        Util.bitor_cs(data, cs)  # Ensure data is modified with CS
+        cls.data_input_only_header(arr, len(data))
+        arr.extend(data)
 
     @classmethod
     def set_irq(cls, arr: array.array) -> None:
@@ -316,7 +317,8 @@ class PioCmdBuilder:
         cs: Optional[int] = None,
     ) -> None:
         """Latch full address to NAND Flash."""
-        addrs = NandAddr.create_full_addr(column_addr, page_addr, block_addr)
+        addrs = array.array('I', [0, 0, 0, 0])  # 4-byte address
+        NandAddr.create_full_addr(addrs, column_addr, page_addr, block_addr)
         cls.addr_latch(arr, addrs, cs)
 
     @classmethod
@@ -327,7 +329,8 @@ class PioCmdBuilder:
         cs: Optional[int] = None,
     ) -> None:
         """Latch block address to NAND Flash."""
-        addrs = NandAddr.create_block_addr(block_addr)
+        addrs = array.array('I', [0, 0])  # 2-byte address
+        NandAddr.create_block_addr(addrs, block_addr)
         cls.addr_latch(arr, addrs, cs)
 
     @classmethod
@@ -341,12 +344,13 @@ class PioCmdBuilder:
         cls.set_irq(arr)
 
     @classmethod
-    def seq_read_id(cls, arr: array.array, cs: int, offset: int = 0, data_count: int = 5) -> None:
+    def seq_read_id(cls, arr: array.array, cs: int, offset: int = 0, data_count: int = 5,) -> None:
         """Read ID sequence for NAND Flash."""
         cls.init_pin(arr)
         cls.assert_cs(arr, cs=cs)
         cls.cmd_latch(arr, cmd=NandCommandId.ReadId, cs=cs)
-        cls.addr_latch(arr, addrs=[offset], cs=cs)
+        addrs = array.array('I', [offset])  # 1-byte address
+        cls.addr_latch(arr, addrs=addrs, cs=cs)
         cls.data_output(arr, data_count=data_count)
         cls.deassert_cs(arr)
         cls.set_irq(arr)
@@ -394,14 +398,14 @@ class PioCmdBuilder:
         column_addr: int,
         page_addr: int,
         block_addr: int,
-        data: List[int],
+        data: array.array,
     ) -> None:
         """Program sequence for NAND Flash."""
         cls.init_pin(arr)
         cls.assert_cs(arr, cs=cs)
         cls.cmd_latch(arr, cmd=NandCommandId.AutoPageProgram1stCycle, cs=cs)
         cls.full_addr_latch(arr, column_addr, page_addr, block_addr, cs)
-        cls.data_input(arr, datas=data, cs=cs)
+        cls.data_input(arr, data=data, cs=cs)
         cls.cmd_latch(arr, cmd=NandCommandId.AutoPageProgram2ndCycle, cs=cs)
         cls.wait_rbb(arr)
         cls.cmd_latch(arr, cmd=NandCommandId.StatusRead, cs=cs)

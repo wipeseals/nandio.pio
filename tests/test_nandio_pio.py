@@ -22,7 +22,9 @@ class TestNandAddr:
         ],
     )
     def test_create_full_addr(self, column_addr: int, page_addr: int, block_addr: int, expect: List[int]):
-        assert NandAddr.create_full_addr(column_addr, page_addr, block_addr) == expect
+        arr = array.array("I", [0, 0, 0, 0])
+        NandAddr.create_full_addr(arr, column_addr, page_addr, block_addr)
+        assert arr.tolist() == expect
 
 class TestPioCmdBuilderBasics:
     @staticmethod
@@ -83,9 +85,12 @@ class TestPioCmdBuilderBasics:
     )
     @pytest.mark.parametrize(
         "addrs",
-        [[0xAA, 0x99, 0x55, 0x66], [0x11, 0x22]],
+        [
+            array.array("I", [0xAA, 0x99, 0x55, 0x66]),
+            array.array("I", [0x11, 0x22]),
+        ],
     )
-    def test_addr_latch(self, cs: int, addrs: List[int]):
+    def test_addr_latch(self, cs: int, addrs: array.array):
         arr = array.array("I")
         PioCmdBuilder.addr_latch(arr, addrs, cs)
 
@@ -124,13 +129,13 @@ class TestPioCmdBuilderBasics:
     @pytest.mark.parametrize(
         "datas",
         [
-            [0xAA, 0x99, 0x55, 0x66],
-            [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88],
-            list(range(512)),
-            list(range(2048)),
+            array.array("I", [0xAA, 0x99, 0x55, 0x66]),
+            array.array("I", [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]),
+            array.array("I", list(range(512))),
+            array.array("I", list(range(2048))),
         ],
     )
-    def test_data_input(self, cs: int, datas: List[int]):
+    def test_data_input(self, cs: int, datas: array.array):
         arr = array.array("I")
         PioCmdBuilder.data_input(arr, datas, cs)
 
@@ -314,12 +319,12 @@ class TestPioCmdBuilderSequences:
     @pytest.mark.parametrize(
         "cs,column_addr,page_addr,block_addr,datas",
         [
-            (0, 0, 0, 0, [0xAA, 0x99, 0x55, 0x66]),
-            (1, 0, 0, 3, [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]),
-            (0, 128, 33, 256, list(range(15))),
-            (1, 256, 2, 3, list(range(512))),
+            (0, 0, 0, 0, array.array("I", [0xAA, 0x99, 0x55, 0x66])),
+            (1, 0, 0, 3, array.array("I", [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88])),
+            (0, 128, 33, 256, array.array("I", list(range(15)))),
+            (1, 256, 2, 3, array.array("I", list(range(512)))),
             # too long
-            # (0, 512, 16, 1023, list(range(2048))),
+            # (0, 512, 16, 1023, array.array("I", list(range(2048)))),
         ],
     )
     def test_seq_program(
@@ -328,7 +333,7 @@ class TestPioCmdBuilderSequences:
         column_addr: int,
         page_addr: int,
         block_addr: int,
-        datas: List[int],
+        datas: array.array,
     ):
         arr = array.array("I")
         PioCmdBuilder.seq_program(arr, cs, column_addr, page_addr, block_addr, datas)
