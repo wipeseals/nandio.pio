@@ -1,4 +1,5 @@
 from typing import List, Optional, Union
+import array
 
 
 class NandCommandId:
@@ -175,272 +176,254 @@ class PioCmdBuilder:
         pindir: int,
         transfer_count: int,
         cmd1: Optional[int],
-    ) -> List[int]:
-        """コマンドの先頭wordを返す. RShiftで取り出す想定. transfer_countに実際にセットされる値は、pio都合で-1される。"""
-        return [
-            # cmd_0 = { cmd_id[3:0], transfer_count[11:0], pindirs[15:0] }
+        arr: array.array,
+    ) -> None:
+        """コマンドの先頭wordをarrに追加する."""
+        arr.append(
             ((cmd_id & 0xF) << 28)
-            | ((((transfer_count - 1) & 0x0FFF) << 16) | (pindir & 0xFFFF)),
-            # cmd_1 = { arg0[31:0] }
-            cmd1 if cmd1 is not None else 0x00000000,
-        ]
+            | ((((transfer_count - 1) & 0x0FFF) << 16) | (pindir & 0xFFFF))
+        )
+        arr.append(cmd1 if cmd1 is not None else 0x00000000)
 
     @classmethod
-    def init_pin(cls) -> List[int]:
+    def init_pin(cls, arr: array.array) -> None:
         """Initialize pin direction and set transfer count."""
-        # cmd_1 = { pins_data[9:0] }
-        #         { ceb1,ceb0,io7,io6,io5,io4,io3,io2,io1,io0 }
-        return cls.create_cmd_header(
+        cls.create_cmd_header(
             cmd_id=PioCmdId.Bitbang,
             pindir=PIN_DIR_WRITE,
-            transfer_count=1,  # don't care
+            transfer_count=1,
             cmd1=Util.bitor_cs(0x00, None),
+            arr=arr,
         )
 
     @classmethod
     def assert_cs(
         cls,
+        arr: array.array,
         cs: Optional[int] = None,
-    ) -> List[int]:
+    ) -> None:
         """Set CEB0/CEB1 pin state."""
-        # cmd_1 = { pins_data[9:0] }
-        #         { ceb1,ceb0,io7,io6,io5,io4,io3,io2,io1,io0 }
-        return cls.create_cmd_header(
+        cls.create_cmd_header(
             cmd_id=PioCmdId.Bitbang,
             pindir=PIN_DIR_WRITE,
-            transfer_count=1,  # don't care
+            transfer_count=1,
             cmd1=Util.bitor_cs(0x00, cs),
+            arr=arr,
         )
 
     @classmethod
-    def deassert_cs(cls) -> List[int]:
+    def deassert_cs(cls, arr: array.array) -> None:
         """Deassert CEB0/CEB1 pin state."""
-        # CS選択なし
-        return cls.assert_cs(cs=None)
+        cls.assert_cs(arr=arr, cs=None)
 
     @classmethod
     def cmd_latch(
         cls,
+        arr: array.array,
         cmd: NandCommandId,
         cs: int,
-    ) -> List[int]:
+    ) -> None:
         """Latch command to NAND Flash."""
-        # cmd_1 = { ceb[1:0], nand_cmd_id[7:0] }
-        return cls.create_cmd_header(
+        cls.create_cmd_header(
             cmd_id=PioCmdId.CmdLatch,
             pindir=PIN_DIR_WRITE,
-            transfer_count=1,  # don't care
+            transfer_count=1,
             cmd1=Util.bitor_cs(cmd, cs),
+            arr=arr,
         )
 
     @classmethod
     def addr_latch(
         cls,
+        arr: array.array,
         addrs: List[int],
         cs: int,
-    ) -> List[int]:
+    ) -> None:
         """Latch address to NAND Flash."""
-        # cmd_1 = { reserved }
-        # data_0, data_1, data_2, ... : { ceb[1:0], addr[7:0] }
-
-        # addr に CS bitをmergeする
         addrs = [Util.bitor_cs(addr, cs) for addr in addrs]
-
-        return [
-            *cls.create_cmd_header(
-                cmd_id=PioCmdId.AddrLatch,
-                pindir=PIN_DIR_WRITE,
-                transfer_count=len(addrs),  # number of address bytes
-                cmd1=None,  # don't care
-            ),
-            *addrs,
-        ]
+        cls.create_cmd_header(
+            cmd_id=PioCmdId.AddrLatch,
+            pindir=PIN_DIR_WRITE,
+            transfer_count=len(addrs),
+            cmd1=None,
+            arr=arr,
+        )
+        arr.extend(addrs)
 
     @classmethod
-    def data_output(cls, data_count: int) -> List[int]:
+    def data_output(cls, arr: array.array, data_count: int) -> None:
         """Output data from NAND Flash."""
-        # cmd_1 = { reserved }
-
-        return cls.create_cmd_header(
+        cls.create_cmd_header(
             cmd_id=PioCmdId.DataOutput,
             pindir=PIN_DIR_READ,
             transfer_count=data_count,
-            cmd1=None,  # don't care
+            cmd1=None,
+            arr=arr,
         )
 
     @classmethod
-    def data_input_only_header(cls, data_count: int) -> List[int]:
-        """Input data header to NAND Flash. (PIOでCS bitorを行う場合向け)"""
-        # cmd_1 = { reserved }
-        return cls.create_cmd_header(
+    def data_input_only_header(cls, arr: array.array, data_count: int) -> None:
+        """Input data header to NAND Flash."""
+        cls.create_cmd_header(
             cmd_id=PioCmdId.DataInput,
             pindir=PIN_DIR_WRITE,
             transfer_count=data_count,
-            cmd1=None,  # don't care
+            cmd1=None,
+            arr=arr,
         )
 
     @classmethod
     def data_input(
         cls,
+        arr: array.array,
         datas: List[int],
         cs: int,
-    ) -> List[int]:
+    ) -> None:
         """Input data to NAND Flash."""
-        # cmd_1 = { reserved }
-
-        # datas に CS bitをmergeする (PIOをもう一つ利用してbitorするなら省略可)
         datas = [Util.bitor_cs(data, cs) for data in datas]
-        return [
-            *cls.data_input_only_header(len(datas)),
-            *datas,
-        ]
+        cls.data_input_only_header(arr, len(datas))
+        arr.extend(datas)
 
     @classmethod
-    def set_irq(cls) -> List[int]:
+    def set_irq(cls, arr: array.array) -> None:
         """Set IRQ."""
-        # cmd_1 = { reserved }
-        return cls.create_cmd_header(
+        cls.create_cmd_header(
             cmd_id=PioCmdId.SetIrq,
             pindir=PIN_DIR_WRITE,
-            transfer_count=1,  # don't care
+            transfer_count=1,
             cmd1=None,
+            arr=arr,
         )
 
     @classmethod
-    def wait_rbb(cls) -> List[int]:
+    def wait_rbb(cls, arr: array.array) -> None:
         """Wait for RBB pin to be low."""
-        # cmd_1 = { reserved }
-        return cls.create_cmd_header(
+        cls.create_cmd_header(
             cmd_id=PioCmdId.WaitRbb,
             pindir=PIN_DIR_WRITE,
-            transfer_count=1,  # don't care
+            transfer_count=1,
             cmd1=None,
+            arr=arr,
         )
 
     @classmethod
     def full_addr_latch(
         cls,
+        arr: array.array,
         column_addr: int,
         page_addr: int,
         block_addr: int,
         cs: Optional[int] = None,
-    ) -> List[int]:
+    ) -> None:
         """Latch full address to NAND Flash."""
         addrs = NandAddr.create_full_addr(column_addr, page_addr, block_addr)
-        return cls.addr_latch(addrs, cs)
+        cls.addr_latch(arr, addrs, cs)
 
     @classmethod
     def block_addr_latch(
         cls,
+        arr: array.array,
         block_addr: int,
         cs: Optional[int] = None,
-    ) -> List[int]:
+    ) -> None:
         """Latch block address to NAND Flash."""
         addrs = NandAddr.create_block_addr(block_addr)
-        return cls.addr_latch(addrs, cs)
+        cls.addr_latch(arr, addrs, cs)
 
     @classmethod
-    def seq_reset(cls, cs: int) -> List[int]:
+    def seq_reset(cls, arr: array.array, cs: int) -> None:
         """Reset sequence for NAND Flash."""
-        return [
-            *cls.init_pin(),
-            *cls.assert_cs(cs=cs),
-            *cls.cmd_latch(cmd=NandCommandId.Reset, cs=cs),
-            *cls.wait_rbb(),
-            *cls.deassert_cs(),
-            *cls.set_irq(),
-        ]
+        cls.init_pin(arr)
+        cls.assert_cs(arr, cs=cs)
+        cls.cmd_latch(arr, cmd=NandCommandId.Reset, cs=cs)
+        cls.wait_rbb(arr)
+        cls.deassert_cs(arr)
+        cls.set_irq(arr)
 
     @classmethod
-    def seq_read_id(cls, cs: int, offset: int = 0, data_count: int = 5) -> List[int]:
+    def seq_read_id(cls, arr: array.array, cs: int, offset: int = 0, data_count: int = 5) -> None:
         """Read ID sequence for NAND Flash."""
-        return [
-            *cls.init_pin(),
-            *cls.assert_cs(cs=cs),
-            *cls.cmd_latch(cmd=NandCommandId.ReadId, cs=cs),
-            *cls.addr_latch(addrs=[offset], cs=cs),  # Offset for Read ID
-            *cls.data_output(data_count=data_count),
-            *cls.deassert_cs(),
-            *cls.set_irq(),
-        ]
+        cls.init_pin(arr)
+        cls.assert_cs(arr, cs=cs)
+        cls.cmd_latch(arr, cmd=NandCommandId.ReadId, cs=cs)
+        cls.addr_latch(arr, addrs=[offset], cs=cs)
+        cls.data_output(arr, data_count=data_count)
+        cls.deassert_cs(arr)
+        cls.set_irq(arr)
 
     @classmethod
     def seq_read(
         cls,
+        arr: array.array,
         cs: int,
         column_addr: int,
         page_addr: int,
         block_addr: int,
         data_count: int,
-    ) -> List[int]:
+    ) -> None:
         """Read sequence for NAND Flash."""
-        return [
-            *cls.init_pin(),
-            *cls.assert_cs(cs=cs),
-            *cls.cmd_latch(cmd=NandCommandId.Read1stCycle, cs=cs),
-            *cls.full_addr_latch(column_addr, page_addr, block_addr, cs),
-            *cls.cmd_latch(cmd=NandCommandId.Read2ndCycle, cs=cs),
-            *cls.wait_rbb(),
-            *cls.data_output(data_count=data_count),
-            *cls.deassert_cs(),
-            *cls.set_irq(),
-        ]
+        cls.init_pin(arr)
+        cls.assert_cs(arr, cs=cs)
+        cls.cmd_latch(arr, cmd=NandCommandId.Read1stCycle, cs=cs)
+        cls.full_addr_latch(arr, column_addr, page_addr, block_addr, cs)
+        cls.cmd_latch(arr, cmd=NandCommandId.Read2ndCycle, cs=cs)
+        cls.wait_rbb(arr)
+        cls.data_output(arr, data_count=data_count)
+        cls.deassert_cs(arr)
+        cls.set_irq(arr)
 
     @classmethod
     def seq_status_read(
         cls,
+        arr: array.array,
         cs: int,
-    ) -> List[int]:
+    ) -> None:
         """Read status sequence for NAND Flash."""
-        return [
-            *cls.init_pin(),
-            *cls.assert_cs(cs=cs),
-            *cls.cmd_latch(cmd=NandCommandId.StatusRead, cs=cs),
-            *cls.data_output(data_count=1),  # Status read
-            *cls.deassert_cs(),
-            *cls.set_irq(),
-        ]
+        cls.init_pin(arr)
+        cls.assert_cs(arr, cs=cs)
+        cls.cmd_latch(arr, cmd=NandCommandId.StatusRead, cs=cs)
+        cls.data_output(arr, data_count=1)
+        cls.deassert_cs(arr)
+        cls.set_irq(arr)
 
     @classmethod
     def seq_program(
         cls,
+        arr: array.array,
         cs: int,
         column_addr: int,
         page_addr: int,
         block_addr: int,
         data: List[int],
-    ) -> List[int]:
+    ) -> None:
         """Program sequence for NAND Flash."""
-        return [
-            *cls.init_pin(),
-            *cls.assert_cs(cs=cs),
-            *cls.cmd_latch(cmd=NandCommandId.AutoPageProgram1stCycle, cs=cs),
-            *cls.full_addr_latch(column_addr, page_addr, block_addr, cs),
-            *cls.data_input(datas=data, cs=cs),
-            *cls.cmd_latch(cmd=NandCommandId.AutoPageProgram2ndCycle, cs=cs),
-            *cls.wait_rbb(),
-            *cls.cmd_latch(cmd=NandCommandId.StatusRead, cs=cs),
-            *cls.data_output(data_count=1),  # Status read
-            *cls.deassert_cs(),
-            *cls.set_irq(),
-        ]
+        cls.init_pin(arr)
+        cls.assert_cs(arr, cs=cs)
+        cls.cmd_latch(arr, cmd=NandCommandId.AutoPageProgram1stCycle, cs=cs)
+        cls.full_addr_latch(arr, column_addr, page_addr, block_addr, cs)
+        cls.data_input(arr, datas=data, cs=cs)
+        cls.cmd_latch(arr, cmd=NandCommandId.AutoPageProgram2ndCycle, cs=cs)
+        cls.wait_rbb(arr)
+        cls.cmd_latch(arr, cmd=NandCommandId.StatusRead, cs=cs)
+        cls.data_output(arr, data_count=1)
+        cls.deassert_cs(arr)
+        cls.set_irq(arr)
 
     @classmethod
     def seq_erase(
         cls,
+        arr: array.array,
         cs: int,
         block_addr: int,
-    ) -> List[int]:
+    ) -> None:
         """Erase sequence for NAND Flash."""
-        return [
-            *cls.init_pin(),
-            *cls.assert_cs(cs=cs),
-            *cls.cmd_latch(cmd=NandCommandId.AutoBlockErase1stCycle, cs=cs),
-            *cls.block_addr_latch(block_addr, cs),
-            *cls.cmd_latch(cmd=NandCommandId.AutoBlockErase2ndCycle, cs=cs),
-            *cls.wait_rbb(),
-            *cls.cmd_latch(cmd=NandCommandId.StatusRead, cs=cs),
-            *cls.data_output(data_count=1),  # Status read
-            *cls.deassert_cs(),
-            *cls.set_irq(),
-        ]
+        cls.init_pin(arr)
+        cls.assert_cs(arr, cs=cs)
+        cls.cmd_latch(arr, cmd=NandCommandId.AutoBlockErase1stCycle, cs=cs)
+        cls.block_addr_latch(arr, block_addr, cs)
+        cls.cmd_latch(arr, cmd=NandCommandId.AutoBlockErase2ndCycle, cs=cs)
+        cls.wait_rbb(arr)
+        cls.cmd_latch(arr, cmd=NandCommandId.StatusRead, cs=cs)
+        cls.data_output(arr, data_count=1)
+        cls.deassert_cs(arr)
+        cls.set_irq(arr)
