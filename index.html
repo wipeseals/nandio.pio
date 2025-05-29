@@ -14,15 +14,47 @@
         <li v-for="r in results">
           <h2>{{ r.name }}</h2>
           <h3>event</h3>
-          <ul>
-            <li v-if="r.event.length === 0">[empty]</li>
-            <li v-else v-for="e in r.event">{{ e }}</li>
-          </ul>
+            <p v-if="r.event.length === 0">[empty]</p>
+          <table v-else>
+            <thead>
+              <tr>
+                <th>cycle</th>
+                <th>pc</th>
+                <th>event</th>
+                <th>ceb0</th>
+                <th>ceb1</th>
+                <th>io</th>
+                <th>io_dir</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="e in r.event">
+                <td>{{ e.cycle }}</td>
+                <td>{{ e.pc }}</td>
+                <td>{{ e.event }}</td>
+                <td>{{ e.ceb0 }}</td>
+                <td>{{ e.ceb1 }}</td>
+                <td>{{ e.io }}</td>
+                <td>{{ e.io_dir }}</td>
+              </tr>
+            </tbody>
+          </table>
           <h3>received_from_rx_fifo</h3>
-            <ul>
-              <li v-if="r.received_from_rx_fifo.length === 0">[empty]</li>
-              <li v-else v-for="d in r.received_from_rx_fifo">0x{{ d.toString(16) }}</li>
-            </ul>
+          <p v-if="r.received_from_rx_fifo.length === 0">[empty]</p>
+          <table v-else>
+            <thead>
+              <tr>
+                <th>index</th>
+                <th>data</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(d, idx) in r.received_from_rx_fifo">
+                <td>{{ idx }}</td>
+                <td>0x{{ d.toString(16) }}</td>
+              </tr>
+            </tbody>
+          </table>
           <h3>wave</h3>
           <img :src="r.wave" />
         </li>
