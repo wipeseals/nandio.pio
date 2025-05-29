@@ -58,7 +58,7 @@ SCENARIOS: List[SimScenario] = [
         PioCmdBuilder.seq_erase(cs=0, block_addr=1023),
         test_cycles=200,
     ),
-    SimScenario("status_read", PioCmdBuilder.seq_status_read(cs=0), test_cycles=30),
+    SimScenario("status_read", PioCmdBuilder.seq_status_read(cs=0), test_cycles=50),
 ]
 
 
