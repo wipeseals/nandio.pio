@@ -97,6 +97,9 @@ class Result:
         (dst_path / "rx_fifo.json").write_text(
             json.dumps(self.rx_fifo), encoding="utf-8"
         )
+        (dst_path / "received_from_rx_fifo.json").write_text(
+            json.dumps(self.received_from_rx_fifo), encoding="utf-8"
+        )
         Path(dst_path / "wave.json").write_text(self.wavedrom_src)
         self.states_df.to_csv(dst_path / "states.csv")
         self.event_df.to_csv(dst_path / "event.csv")
@@ -413,7 +416,7 @@ class Simulator:
         program_str: str,
         test_cycles: int,
         tx_fifo_entries: List[int] = [],
-        dequeue_period_cyc: int = 0,
+        dequeue_period_cyc: int = 8,
         input_source: Callable[[pioemu.State], int]
         | Callable[[int], int]
         | None = None,
