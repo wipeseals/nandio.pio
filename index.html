@@ -1,20 +1,44 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>nandio.pio simulation result</title>
     <script src="https://unpkg.com/vue@3"></script>
+    <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css" />
+    <style>
+      :root {
+        color-scheme: light;
+        --accent: lightblue;
+      }
+      .center-img {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        max-width: none;
+        height: auto;
+        background: white;
+      }
+    </style>
   </head>
   <body>
     <div id="app">
-      <h1><a href="https://github.com/wipeseals/nandio.pio">NANDIO.PIO</a> Simulation Result</h1>
+      <h1>
+        <a href="https://github.com/wipeseals/nandio.pio">NANDIO.PIO</a>
+        Simulation Result
+      </h1>
       <p>
-        This page shows the simulation result of <a href="https://github.com/wipeseals/nandio.pio">wipeseals/nandio.pio</a> on the simulator.
+        This page shows the simulation result of
+        <a href="https://github.com/wipeseals/nandio.pio"
+          >wipeseals/nandio.pio</a
+        >
+        on the simulator.
       </p>
       <ul>
         <li v-for="r in results">
           <h2>{{ r.name }}</h2>
           <h3>event</h3>
-            <p v-if="r.event.length === 0">[empty]</p>
+          <p v-if="r.event.length === 0">[empty]</p>
           <table v-else>
             <thead>
               <tr>
@@ -56,7 +80,7 @@
             </tbody>
           </table>
           <h3>wave</h3>
-          <img :src="r.wave" />
+          <img :src="r.wave" class="center-img" />
         </li>
       </ul>
       <div v-if="error">{{ error }}</div>
