@@ -1,6 +1,4 @@
-from typing import List, Optional, Union
 import array
-
 
 class NandCommandId:
     """NAND Flash Command"""
@@ -67,7 +65,7 @@ class Util:
         return (high << 16) | low
 
     @classmethod
-    def gen_ceb_bits(cls, cs: Optional[int] = None) -> int:
+    def gen_ceb_bits(cls, cs: int | None = None) -> int:
         """cs指定からCEB0/CEB1のピン状態を返す"""
         if cs is None:
             return cls.bit_on(PinAssign.CEB0) | cls.bit_on(PinAssign.CEB1)
@@ -80,14 +78,14 @@ class Util:
 
     @classmethod
     def apply_cs(
-        cls, data_src: int, cs: Optional[int]
+        cls, data_src: int, cs: int | None
     ) -> int:
         """data_srcに対して、csを指定してCEB0/CEB1をセットする。単一変数・arrayどちらでも対応。arrayの場合は内容を変更する。"""
         return cls.gen_ceb_bits(cs) | data_src
 
     @classmethod
     def apply_cs_to_data_array(
-        cls, data_src: array.array, cs: Optional[int]
+        cls, data_src: array.array, cs: int | None
     ) -> None:
         """data_srcに対して、csを指定してCEB0/CEB1をセットする。arrayの場合は内容を変更する。"""
         for i in range(len(data_src)):
@@ -177,7 +175,7 @@ class PioCmdBuilder:
         cmd_id: int,
         pindir: int,
         transfer_count: int,
-        cmd1: Optional[int],
+        cmd1: int | None,
         arr: array.array,
     ) -> None:
         """コマンドの先頭wordをarrに追加する."""
@@ -202,7 +200,7 @@ class PioCmdBuilder:
     def assert_cs(
         cls,
         arr: array.array,
-        cs: Optional[int] = None,
+        cs: int | None = None,
     ) -> None:
         """Set CEB0/CEB1 pin state."""
         cls.create_cmd_header(
@@ -315,7 +313,7 @@ class PioCmdBuilder:
         column_addr: int,
         page_addr: int,
         block_addr: int,
-        cs: Optional[int] = None,
+        cs: int | None = None,
     ) -> None:
         """Latch full address to NAND Flash."""
         addrs = array.array('I', [0, 0, 0, 0])  # 4-byte address
@@ -327,7 +325,7 @@ class PioCmdBuilder:
         cls,
         arr: array.array,
         block_addr: int,
-        cs: Optional[int] = None,
+        cs: int | None = None,
     ) -> None:
         """Latch block address to NAND Flash."""
         addrs = array.array('I', [0, 0])  # 2-byte address

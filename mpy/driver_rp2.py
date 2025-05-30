@@ -1,6 +1,7 @@
 import time
 
 from mpy.nand import NandConfig, NandCmd, NandStatus
+from sim.nandio_pio import NandCommandId, PinAssign
 
 from machine import Pin
 
@@ -13,22 +14,22 @@ class NandIo:
     ) -> None:
         self._delay_us = delay_us
         self._keep_wp = keep_wp
-        self._io0 = Pin(0, Pin.OUT)
-        self._io1 = Pin(1, Pin.OUT)
-        self._io2 = Pin(2, Pin.OUT)
-        self._io3 = Pin(3, Pin.OUT)
-        self._io4 = Pin(4, Pin.OUT)
-        self._io5 = Pin(5, Pin.OUT)
-        self._io6 = Pin(6, Pin.OUT)
-        self._io7 = Pin(7, Pin.OUT)
-        self._ceb0 = Pin(8, Pin.OUT)
-        self._ceb1 = Pin(9, Pin.OUT)
-        self._cle = Pin(10, Pin.OUT)
-        self._ale = Pin(11, Pin.OUT)
-        self._wpb = Pin(12, Pin.OUT)
-        self._web = Pin(13, Pin.OUT)
-        self._reb = Pin(14, Pin.OUT)
-        self._rbb = Pin(15, Pin.IN, Pin.PULL_UP)
+        self._io0 = Pin(PinAssign.IO0, Pin.OUT)
+        self._io1 = Pin(PinAssign.IO1, Pin.OUT)
+        self._io2 = Pin(PinAssign.IO2, Pin.OUT)
+        self._io3 = Pin(PinAssign.IO3, Pin.OUT)
+        self._io4 = Pin(PinAssign.IO4, Pin.OUT)
+        self._io5 = Pin(PinAssign.IO5, Pin.OUT)
+        self._io6 = Pin(PinAssign.IO6, Pin.OUT)
+        self._io7 = Pin(PinAssign.IO7, Pin.OUT)
+        self._ceb0 = Pin(PinAssign.CEB0, Pin.OUT)
+        self._ceb1 = Pin(PinAssign.CEB1, Pin.OUT)
+        self._cle = Pin(PinAssign.CLE, Pin.OUT)
+        self._ale = Pin(PinAssign.ALE, Pin.OUT)
+        self._wpb = Pin(PinAssign.WPB, Pin.OUT)
+        self._web = Pin(PinAssign.WEB, Pin.OUT)
+        self._reb = Pin(PinAssign.REB, Pin.OUT)
+        self._rbb = Pin(PinAssign.RBB, Pin.IN, Pin.PULL_UP)
 
         self._io = [
             self._io0,
