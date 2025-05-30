@@ -1,7 +1,7 @@
+import array
 import time
 
-from mpy.nand import NandConfig, NandCmd, NandStatus
-from sim.nandio_pio import NandCommandId, PinAssign
+from sim.nandio_pio import NandConfig, NandAddr, NandCommandId, NandStatus, PinAssign
 
 from machine import Pin
 
@@ -136,7 +136,7 @@ class NandIo:
         self.set_web(1)
         self.set_cle(0)
 
-    def input_addrs(self, addrs: bytearray) -> None:
+    def input_addrs(self, addrs: array.array) -> None:
         for addr in addrs:
             self.set_io(addr)
             self.set_ale(1)
@@ -146,7 +146,8 @@ class NandIo:
             self.set_ale(0)
 
     def input_addr(self, addr: int) -> None:
-        self.input_addrs(bytearray([addr]))
+        addrs = array.array("B", [addr])
+        self.input_addrs(addrs)
 
     def output_data(self, num_bytes: int) -> bytearray:
         datas = bytearray()
@@ -188,7 +189,7 @@ class NandCommander:
         # CS select
         nandio.set_ceb(chip_index=chip_index)
         # Command Input
-        nandio.input_cmd(NandCmd.READ_ID)
+        nandio.input_cmd(NandCommandId.READ_ID)
         # Address Input
         nandio.input_addr(0)
         # ID Read
@@ -206,18 +207,19 @@ class NandCommander:
         col: int = 0,
         num_bytes: int = NandConfig.PAGE_ALL_BYTES,
     ) -> bytearray | None:
-        page_addr = NandConfig.create_nand_addr(block=block, page=page, col=col)
         nand = self._nandio
         # initialize
         nand.init_pin()
         # CS select
         nand.set_ceb(chip_index=chip_index)
         # 1st Command Input
-        nand.input_cmd(NandCmd.READ_1ST)
+        nand.input_cmd(NandCommandId.READ_1ST)
         # Address Input
-        nand.input_addrs(page_addr)
+        addrs = array.array("B", [0, 0, 0, 0])
+        NandAddr.create_full_addr(addrs, col, page, block)
+        nand.input_addrs(addrs)
         # 2nd Command Input
-        nand.input_cmd(NandCmd.READ_2ND)
+        nand.input_cmd(NandCommandId.READ_2ND)
         # Wait Busy
         is_ok = nand.wait_busy(timeout_ms=self._timeout_ms)
         if not is_ok:
@@ -235,7 +237,7 @@ class NandCommander:
         # CS select
         nand.set_ceb(chip_index=chip_index)
         # Command Input
-        nand.input_cmd(NandCmd.STATUS_READ)
+        nand.input_cmd(NandCommandId.STATUS_READ)
         # Status Read
         status = nand.output_data(num_bytes=1)
         # CS deselect
@@ -243,18 +245,19 @@ class NandCommander:
         return status[0]
 
     def erase_block(self, chip_index: int, block: int) -> bool:
-        block_addr = NandConfig.create_block_addr(block=block)
         nand = self._nandio
         # initialize
         nand.init_pin()
         # CS select
         nand.set_ceb(chip_index=chip_index)
         # 1st Command Input
-        nand.input_cmd(NandCmd.ERASE_1ST)
+        nand.input_cmd(NandCommandId.ERASE_1ST)
         # Address Input
-        nand.input_addrs(block_addr)
+        addrs = array.array("B", [0, 0])
+        NandAddr.create_block_addr(addrs, block)
+        nand.input_addrs(addrs)
         # 2nd Command Input
-        nand.input_cmd(NandCmd.ERASE_2ND)
+        nand.input_cmd(NandCommandId.ERASE_2ND)
         # Wait Busy
         is_ok = nand.wait_busy(timeout_ms=self._timeout_ms)
         # CS deassert
@@ -277,16 +280,17 @@ class NandCommander:
         data: bytearray,
         col: int = 0,
     ) -> bool:
-        page_addr = NandConfig.create_nand_addr(block=block, page=page, col=col)
         nand = self._nandio
         # initialize
         nand.init_pin()
         # CS select
         nand.set_ceb(chip_index=chip_index)
         # 1st Command Input
-        nand.input_cmd(NandCmd.PROGRAM_1ST)
+        nand.input_cmd(NandCommandId.PROGRAM_1ST)
         # Address Input
-        nand.input_addrs(page_addr)
+        addrs = array.array("B", [0, 0, 0, 0])
+        NandAddr.create_full_addr(addrs, col, page, block)
+        nand.input_addrs(addrs)
         # Data Input
         for i in range(len(data)):
             nand.set_io(data[i])
@@ -294,7 +298,7 @@ class NandCommander:
             nand.delay()
             nand.set_web(1)
         # 2nd Command Input
-        nand.input_cmd(NandCmd.PROGRAM_2ND)
+        nand.input_cmd(NandCommandId.PROGRAM_2ND)
         # Wait Busy
         is_ok = nand.wait_busy(timeout_ms=self._timeout_ms)
         # CS deassert

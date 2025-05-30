@@ -188,7 +188,7 @@ class TestPioCmdBuilderBasics:
     )
     @pytest.mark.parametrize(
         "cmd",
-        [NandCommandId.Reset, NandCommandId.ReadId],
+        [NandCommandId.RESET, NandCommandId.READ_ID],
     )
     def test_cmd_latch(self, cs: int | None, cmd: int):
         arr = array.array("I")
@@ -296,7 +296,7 @@ class TestPioCmdBuilderSequences:
         )
 
         assert ret.event_df.iloc[0]["event"] == "cmd_in"
-        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.Reset
+        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.RESET
         assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
@@ -324,7 +324,7 @@ class TestPioCmdBuilderSequences:
 
         # READ ID
         assert ret.event_df.iloc[0]["event"] == "cmd_in"
-        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.ReadId
+        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.READ_ID
         assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
@@ -376,7 +376,7 @@ class TestPioCmdBuilderSequences:
 
         # read 1st cycle
         assert ret.event_df.iloc[0]["event"] == "cmd_in"
-        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.Read1stCycle
+        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.READ_1ST
         assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
@@ -399,7 +399,7 @@ class TestPioCmdBuilderSequences:
             assert ret.event_df.iloc[i + 1]["ceb1"] == (0 if cs == 1 else 1)
         # Read 2nd cycle
         assert ret.event_df.iloc[5]["event"] == "cmd_in"
-        assert ret.event_df.iloc[5]["io_raw"] == NandCommandId.Read2ndCycle
+        assert ret.event_df.iloc[5]["io_raw"] == NandCommandId.READ_2ND
         assert ret.event_df.iloc[5]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[5]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[5]["ceb1"] == (0 if cs == 1 else 1)
@@ -426,7 +426,7 @@ class TestPioCmdBuilderSequences:
 
         # Read Status
         assert ret.event_df.iloc[0]["event"] == "cmd_in"
-        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.StatusRead
+        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.STATUS_READ
         assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
@@ -463,7 +463,7 @@ class TestPioCmdBuilderSequences:
 
         # write 1st cycle
         assert ret.event_df.iloc[0]["event"] == "cmd_in"
-        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.AutoPageProgram1stCycle
+        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.PROGRAM_1ST
         assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
@@ -496,14 +496,14 @@ class TestPioCmdBuilderSequences:
         assert ret.event_df.iloc[len(datas) + 5]["event"] == "cmd_in"
         assert (
             ret.event_df.iloc[len(datas) + 5]["io_raw"]
-            == NandCommandId.AutoPageProgram2ndCycle
+            == NandCommandId.PROGRAM_2ND
         )
         assert ret.event_df.iloc[len(datas) + 5]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[len(datas) + 5]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[len(datas) + 5]["ceb1"] == (0 if cs == 1 else 1)
         # status read
         assert ret.event_df.iloc[len(datas) + 6]["event"] == "cmd_in"
-        assert ret.event_df.iloc[len(datas) + 6]["io_raw"] == NandCommandId.StatusRead
+        assert ret.event_df.iloc[len(datas) + 6]["io_raw"] == NandCommandId.STATUS_READ
         assert ret.event_df.iloc[len(datas) + 6]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[len(datas) + 6]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[len(datas) + 6]["ceb1"] == (0 if cs == 1 else 1)
@@ -537,7 +537,7 @@ class TestPioCmdBuilderSequences:
 
         # Erase 1st cycle
         assert ret.event_df.iloc[0]["event"] == "cmd_in"
-        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.AutoBlockErase1stCycle
+        assert ret.event_df.iloc[0]["io_raw"] == NandCommandId.ERASE_1ST
         assert ret.event_df.iloc[0]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[0]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[0]["ceb1"] == (0 if cs == 1 else 1)
@@ -556,13 +556,13 @@ class TestPioCmdBuilderSequences:
             assert ret.event_df.iloc[i + 1]["ceb1"] == (0 if cs == 1 else 1)
         # Erase 2nd cycle
         assert ret.event_df.iloc[3]["event"] == "cmd_in"
-        assert ret.event_df.iloc[3]["io_raw"] == NandCommandId.AutoBlockErase2ndCycle
+        assert ret.event_df.iloc[3]["io_raw"] == NandCommandId.ERASE_2ND
         assert ret.event_df.iloc[3]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[3]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[3]["ceb1"] == (0 if cs == 1 else 1)
         # status read
         assert ret.event_df.iloc[4]["event"] == "cmd_in"
-        assert ret.event_df.iloc[4]["io_raw"] == NandCommandId.StatusRead
+        assert ret.event_df.iloc[4]["io_raw"] == NandCommandId.STATUS_READ
         assert ret.event_df.iloc[4]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[4]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[4]["ceb1"] == (0 if cs == 1 else 1)

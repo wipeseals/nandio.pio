@@ -1,184 +1,12 @@
-import sys
 import json
-import math
-
-# Physical Block Address
-PBA = int
-# chip id type
-CHIP = int
-# block id type
-BLOCK = int
-# page type
-PAGE = int
-# sector type
-SECTOR = int
-# column type
-COLUMN = int
-# block bitmap type
-BLOCK_BITMAP = int
-
-
-############################################################################
-# NAND Flash Definitions for TC58NVG0S3HTA00
-############################################################################
-class NandCmd:
-    READ_ID = 0x90
-    READ_1ST = 0x00
-    READ_2ND = 0x30
-    ERASE_1ST = 0x60
-    ERASE_2ND = 0xD0
-    STATUS_READ = 0x70
-    PROGRAM_1ST = 0x80
-    PROGRAM_2ND = 0x10
-
-
-class NandStatus:
-    PROGRAM_ERASE_FAIL = 0x01
-    CACHE_PROGRAM_FAIL = 0x02
-    PAGE_BUFFER_READY = 0x20
-    DATA_CACHE_READY = 0x40
-    WRITE_PROTECT_DISABLE = 0x80
-
-
-class NandConfig:
-    """
-    NAND Flash Configuration for JISC-SSD TC58NVG0S3HTA00
-    note: 動作中に別NANDに切り替えることはないのでinstanceを撒かない
-          現時点ではJISC-SSD以外のターゲットは想定していないのでdataclassのような動的な値決めのクラスとしては機能しない
-    """
-
-    # JISC-SSD TC58NVG0S3HTA00 x 2
-    MAX_CS = 2
-    # ID Read Command for TC58NVG0S3HTA00
-    READ_ID_EXPECT = bytearray([0x98, 0xF1, 0x80, 0x15, 0x72])
-    # data area
-    PAGE_USABLE_BYTES = 2048
-    # spare area
-    PAGE_SPARE_BYTES = 128
-    # 2048byte(main) + 128byte(redundancy or other uses)
-    PAGE_ALL_BYTES = PAGE_USABLE_BYTES + PAGE_SPARE_BYTES
-    # number of pages per block
-    PAGES_PER_BLOCK = 64
-    # number of blocks per CS
-    BLOCKS_PER_CS = 1024
-    # sector size
-    SECTOR_BYTES = 512
-    # number of sectors per page (2048byte / 512byte = 4)
-    SECTOR_PER_PAGE = PAGE_USABLE_BYTES // SECTOR_BYTES
-
-    # sector bits (log2(4) = 2)
-    SECTOR_BITS = math.ceil(math.log2(SECTOR_PER_PAGE))
-    # page bits (log2(64) = 6)
-    PAGE_BITS = math.ceil(math.log2(PAGES_PER_BLOCK))
-    # block bits (log2(1024) = 10)
-    BLOCK_BITS = math.ceil(math.log2(BLOCKS_PER_CS))
-    # cs bits (log2(2) = 1)
-    CS_BITS = math.ceil(math.log2(MAX_CS))
-    # total bits
-    TOTAL_BITS = SECTOR_BITS + PAGE_BITS + BLOCK_BITS + CS_BITS
-
-    # sector mask (2^2 - 1 = 0x3)
-    SECTOR_MASK = (1 << SECTOR_BITS) - 1
-    # page mask (2^6 - 1 = 0x3F)
-    PAGE_MASK = (1 << PAGE_BITS) - 1
-    # block mask (2^10 - 1 = 0x3FF)
-    BLOCK_MASK = (1 << BLOCK_BITS) - 1
-    # cs mask (2^1 - 1 = 0x1)
-    CS_MASK = (1 << CS_BITS) - 1
-
-    @staticmethod
-    def decode_phys_addr(addr: PBA) -> tuple[CHIP, BLOCK, PAGE, SECTOR]:
-        """Decode NAND Flash Address
-        | chip[0] | block[9:0] | page[5:0] | sector[1:0] |
-        """
-        sector = addr & NandConfig.SECTOR_MASK
-        addr >>= NandConfig.SECTOR_BITS
-        page = addr & NandConfig.PAGE_MASK
-        addr >>= NandConfig.PAGE_BITS
-        block = addr & NandConfig.BLOCK_MASK
-        addr >>= NandConfig.BLOCK_BITS
-        chip = addr & NandConfig.CS_MASK
-        addr >>= NandConfig.CS_BITS
-        return chip, block, page, sector
-
-    @staticmethod
-    def encode_phys_addr(chip: CHIP, block: BLOCK, page: PAGE, sector: SECTOR) -> PBA:
-        """Encode NAND Flash Address
-        | chip[0] | block[9:0] | page[5:0] | sector[1:0] |
-        """
-        addr = chip & NandConfig.CS_MASK
-        addr <<= NandConfig.BLOCK_BITS
-        addr |= block & NandConfig.BLOCK_MASK
-        addr <<= NandConfig.PAGE_BITS
-        addr |= page & NandConfig.PAGE_MASK
-        addr <<= NandConfig.SECTOR_BITS
-        addr |= sector & NandConfig.SECTOR_MASK
-        return addr
-
-    @staticmethod
-    def create_nand_addr(block: BLOCK, page: PAGE, col: COLUMN) -> bytearray:
-        """Create NAND Flash Address
-
-        | cycle# | Data                  |
-        |--------|-----------------------|
-        | 0      | COL[7:0]              |
-        | 1      | COL[15:8]             |
-        | 2      | BLOCK[1:0], PAGE[5:0] |
-        | 3      | BLOCK[10:2]           |
-        """
-        addr = bytearray()
-        addr.append(col & 0xFF)
-        addr.append((col >> 8) & 0xFF)
-        addr.append(((block & 0x3) << 6) | (page & 0x3F))
-        addr.append((block >> 2) & 0xFF)
-        return addr
-
-    @staticmethod
-    def create_block_addr(block: BLOCK) -> bytearray:
-        """Create NAND Flash Block Address
-
-        | cycle | Data      |
-        |-------|-----------|
-        | 0     | BLOCK[7:0]|
-        | 1     | BLOCK[15:8]|
-        """
-        addr = bytearray()
-        addr.append(block & 0xFF)
-        addr.append((block >> 8) & 0xFF)
-        return addr
-
-
-############################################################################
-# RP2040 Driver or Simulator
-############################################################################
-
-sim_platforms = ["linux", "windows", "webassembly", "qemu"]
-if sys.platform in sim_platforms:
-    # Simulator
-    import mpy.driver_sim as d_sim
-else:
-    # RP2040 Driver
-    import mpy.driver_rp2 as d_rp2
-
-
-def get_driver(
-    keep_wp: bool = True,
-) -> tuple[d_sim.NandIo | d_rp2.NandIo, d_sim.NandCommander | d_rp2.NandCommander]:
-    is_sim = sys.platform in sim_platforms
-    if is_sim:
-        nandio = d_sim.NandIo(keep_wp=keep_wp)
-        nandcmd = d_sim.NandCommander(nandio=nandio)
-        return nandio, nandcmd
-    else:
-        nandio = d_rp2.NandIo(keep_wp=keep_wp)
-        nandcmd = d_rp2.NandCommander(nandio=nandio, timeout_ms=1000)
-        return nandio, nandcmd
+from mpy.nandio import NandIo, NandCommander
+from sim.nandio_pio import BLOCK, CHIP, LBA, PAGE, PBA, NandConfig
 
 
 class NandBlockManager:
     def __init__(
         self,
-        nandcmd: d_sim.NandCommander | d_rp2.NandCommander,
+        nandcmd: NandCommander | NandCommander,
         # initialized values
         is_initial: bool = False,
         num_chip: CHIP = 0,
@@ -189,7 +17,7 @@ class NandBlockManager:
         if not is_initial:
             try:
                 self.load()
-            except OSError as e:
+            except OSError as _:
                 is_initial = True
 
         if is_initial:
@@ -213,7 +41,6 @@ class NandBlockManager:
             f = open(filepath, "w")
             f.write(json_str)
             f.close()
-            trace(f"BLKMNG\t{self.save.__name__}\t{filepath}\t{json_str}")
         except OSError as e:
             raise e
 
@@ -413,3 +240,187 @@ class PageCodec:
         # data = bytearray([lfsr.next() ^ x for x in data])
         # TODO: CRC Errorを解消できなかった場合、エラー応答する
         return data[: NandConfig.PAGE_USABLE_BYTES]  # Parity除去
+
+
+class Mapping:
+    """LBAとPBAのマッピングを管理するクラス"""
+
+    def __init__(self) -> None:
+        self.l2p: dict[LBA, PBA] = dict()
+
+    def resolve(self, lba: LBA) -> PBA | None:
+        """LBA -> PBAの変換"""
+        pba = self.l2p.get(lba)
+        return pba
+
+    def update(self, lba: LBA, pba: PBA) -> None:
+        """LBA -> PBAの割当更新"""
+        self.l2p[lba] = pba
+
+    def unmap(self, lba: LBA) -> None:
+        """LBAのマッピング削除"""
+        self.l2p.pop(lba, None)
+
+
+class FlashTranslationLayer:
+    """Flash Translation Layer (FTL)"""
+
+    def __init__(self) -> None:
+        # NAND IO Drivers
+        self.nandio = NandIo(keep_wp=False)
+        # NAND Commander
+        self.nandcmd = NandCommander(nandio=self.nandio)
+        # NAND Block Manager
+        self.blockmng = NandBlockManager(nandcmd=self.nandcmd)
+        # NAND Page Codec
+        self.codec = PageCodec()
+        # LBA -> PBAのマッピング
+        self.mapping = Mapping()
+
+        # Write Buffer (WriteはEncode都合でpage単位で行うため、複数sector束ねる用)
+        self.write_buffer: bytearray = bytearray([0x0] * NandConfig.PAGE_USABLE_BYTES)
+        # write buffer 上にあるLBA (有効なsector数を求める目的と、Write Buffer城のデータを返却するケースで使用)
+        self.write_buffer_lbas: list[LBA] = list()
+        # 現在の書き込み進捗
+        self.current_write_chip: int | None = None
+        self.current_write_block: int | None = None
+        self.current_write_page: int | None = None
+        self.current_write_sector: int | None = None
+
+    ########################################################
+    # Physical Address Read
+    ########################################################
+
+    def read_page(self, chip_index: int, block: int, page: int) -> bytearray | None:
+        """指定されたページをすべて読み出し"""
+        # データを読み込む
+        page_data = self.blockmng.read(chip_index, block, page)
+        if page_data is None:
+            return None
+        # データをデコード
+        decode_page_data = self.codec.decode(page_data)
+        if decode_page_data is None:
+            return None
+        return decode_page_data
+
+    def read_sector(
+        self, chip_index: int, block: int, page: int, sector: int
+    ) -> bytearray | None:
+        """指定されたページのセクタを読み出し"""
+        # データを読み込む
+        page_data = self.read_page(chip_index, block, page)
+        if page_data is None:
+            return None
+        # ほしいSectorを取得
+        sector_data = page_data[
+            sector * NandConfig.SECTOR_BYTES : (sector + 1) * NandConfig.SECTOR_BYTES
+        ]
+        return sector_data
+
+    ########################################################
+    # Physical Address Write
+    ########################################################
+
+    def write_page(
+        self, chip_index: int, block: int, page: int, data: bytearray
+    ) -> bool:
+        """指定されたページを書き込む"""
+        # データをエンコード
+        encode_page_data = self.codec.encode(data)
+        if encode_page_data is None:
+            return False
+        # データを書き込む
+        result = self.blockmng.program(chip_index, block, page, encode_page_data)
+        if not result:
+            return False
+        return True
+
+    ########################################################
+    # Logical Address Functions
+    ########################################################
+
+    @staticmethod
+    def unmap_sector() -> bytearray:
+        return bytearray([0x0] * NandConfig.SECTOR_BYTES)
+
+    def read_logical(self, lba: LBA) -> bytearray:
+        """指定されたLBAを読み出し"""
+        # Write Bufferに書き込み中の場合は、Write Bufferから読み出す
+        if lba in self.write_buffer_lbas:
+            # Write Buffer上のLBAを取得
+            sector_index = self.write_buffer_lbas.index(lba)
+            # Write Buffer上のSectorを取得
+            sector_data = self.write_buffer[
+                sector_index * NandConfig.SECTOR_BYTES : (sector_index + 1)
+                * NandConfig.SECTOR_BYTES
+            ]
+            return sector_data
+        # LBA -> PBAの変換
+        pba = self.mapping.resolve(lba)
+        if pba is None:
+            return self.unmap_sector()
+
+        # PBAをCS, Block, Page, Sectorに展開して読み出し
+        chip, block, page, sector = NandConfig.decode_phys_addr(pba)
+        sector_data = self.read_sector(chip, block, page, sector)
+        if sector_data is None:
+            return self.unmap_sector()
+        return sector_data
+
+    def write_logical(self, lba: LBA, data: bytearray) -> bool:
+        """指定されたLBAに書き込む"""
+        # 書き込み先Chip/Blockを予約して先頭から使う
+        if (
+            self.current_write_chip is None
+            or self.current_write_block is None
+            or self.current_write_page is None
+            or self.current_write_sector is None
+        ):
+            self.current_write_chip, self.current_write_block = self.blockmng.alloc()
+            self.current_write_page = 0
+            self.current_write_sector = 0
+            self.write_buffer_lbas = list()  # 書き込み先LBAを初期化
+        # PBA決定 + Mapping更新
+        pba = NandConfig.encode_phys_addr(
+            self.current_write_chip,
+            self.current_write_block,
+            self.current_write_page,
+            self.current_write_sector,
+        )
+        self.mapping.update(lba, pba)
+        # Write Bufferに書き込み
+        self.write_buffer[
+            self.current_write_sector * NandConfig.SECTOR_BYTES : (
+                self.current_write_sector + 1
+            )
+            * NandConfig.SECTOR_BYTES
+        ] = data
+        # Write Buffer上のLBA情報を更新
+        self.write_buffer_lbas.append(lba)
+
+        # Write Bufferがいっぱいになったら書き込み
+        if len(self.write_buffer_lbas) < NandConfig.SECTOR_PER_PAGE:
+            # 次のセクタへ移動
+            self.current_write_sector += 1
+            return True
+        else:
+            # 書き込み
+            write_result = self.write_page(
+                self.current_write_chip,
+                self.current_write_block,
+                self.current_write_page,
+                self.write_buffer,
+            )
+            # 書き込み先LBAを初期化
+            self.write_buffer_lbas = list()
+            # 次のページへ移動
+            self.current_write_sector = 0
+            self.current_write_page += 1
+            # Block内のページを使い切ったら書き込み先を初期化
+            if self.current_write_page >= NandConfig.PAGES_PER_BLOCK:
+                self.current_write_chip = None
+                self.current_write_block = None
+                self.current_write_page = None
+                self.current_write_sector = None
+            # 書き込み結果を返却
+            return write_result

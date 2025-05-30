@@ -55,7 +55,15 @@ PIO_OPCODES: array.array = array('H', [40096, 31888, 31788, 31812, 40096, 7304, 
 
 ### JISC-SSD Board (RP2040 + NAND Flash)
 
-TODO
+#### MicroPython のインストール
+
+- Raspberry Pi Pico の公式サイトから、RP2040 用の MicroPython Runtime の UF2 File をダウンロードし書き込み
+  - 詳細は [MicroPython - Raspberry Pi](https://www.raspberrypi.com/documentation/microcontrollers/micropython.html) を参照
+
+#### MicroPython スクリプトの実行
+
+- Raspberry Pi Pico 上にプロジェクトを転送して実行
+  - vscode + [MicroPico Extension](https://marketplace.visualstudio.com/items?itemName=paulober.pico-w-go): `MicroPico: Upload project to Pico`
 
 ## References
 
@@ -63,7 +71,8 @@ TODO
 - [TC58NVG0S3HTA00 Datasheet](https://www.kioxia.com/content/dam/kioxia/newidr/productinfo/datasheet/201910/DST_TC58NVG0S3HTA00-TDE_EN_31435.pdf)
 - [RP2040 Datasheet](https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf)
 - [GitHub - crane-elec/rawnand_test](https://github.com/crane-elec/rawnand_test)
-
+- [ゼロから学ぶSSD：構造、動作、耐久性のポイント - キオクシア株式会社](https://www.kioxia.com/content/dam/kioxia/ja-jp/business/ssd/asset/SNIA-seminar-202502.pdf)
+  
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
