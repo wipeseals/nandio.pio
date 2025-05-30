@@ -310,7 +310,7 @@ class PioCmdBuilder:
         cls,
         arr: array.array,
         cmd: int,
-        cs: int,
+        cs: int | None,
     ) -> None:
         """Latch command to NAND Flash."""
         cls.create_cmd_header(
