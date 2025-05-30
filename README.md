@@ -7,7 +7,10 @@ Accelerating NAND Flash Communication using PIO (Programmable IO).
 
 ## Features
 
-TODO
+- High-speed NAND flash communication using PIO
+- PIO simulation environment for verification
+- Supports JISC-SSD (Jisaku In-Storage Computation SSD) board
+- Unit tests and CI for quality assurance
 
 ## Installation
 
@@ -55,15 +58,38 @@ PIO_OPCODES: array.array = array('H', [40096, 31888, 31788, 31812, 40096, 7304, 
 
 ### JISC-SSD Board (RP2040 + NAND Flash)
 
-#### MicroPython のインストール
+#### Install MicroPython
 
-- Raspberry Pi Pico の公式サイトから、RP2040 用の MicroPython Runtime の UF2 File をダウンロードし書き込み
-  - 詳細は [MicroPython - Raspberry Pi](https://www.raspberrypi.com/documentation/microcontrollers/micropython.html) を参照
+- Download the MicroPython UF2 file for RP2040 from the official Raspberry Pi Pico website and flash it to the board.
+  - See [MicroPython - Raspberry Pi](https://www.raspberrypi.com/documentation/microcontrollers/micropython.html) for details.
 
-#### MicroPython スクリプトの実行
+#### Run MicroPython scripts
 
-- Raspberry Pi Pico 上にプロジェクトを転送して実行
-  - vscode + [MicroPico Extension](https://marketplace.visualstudio.com/items?itemName=paulober.pico-w-go): `MicroPico: Upload project to Pico`
+- Transfer the project to the Raspberry Pi Pico and run.
+
+##### Using vscode [MicroPico Extension](https://marketplace.visualstudio.com/items?itemName=paulober.pico-w-go)
+
+Run the `MicroPico: Upload project to Pico` (`@command:micropico.upload`) command to upload the project to the Raspberry Pi Pico.
+
+##### Using mpremote
+
+```bash
+uvx mpremote connect COM13 + fs --recursive --force cp main.py :/main.py + cp  nandio.py :/nandio.py + cp  sim/nandio_pio.py :/sim/nandio_pio.py  + cp  mpy/driver.py :/mpy/driver.py + cp mpy/ftl.py :/mpy/ftl.py + fs ls + soft-reset + run main.py + repl
+cp main.py :/main.py
+cp nandio.py :/nandio.py
+Up to date: /nandio.py
+cp sim/nandio_pio.py :/sim/nandio_pio.py
+Up to date: /sim/nandio_pio.py
+cp mpy/driver.py :/mpy/driver.py
+cp mpy/ftl.py :/mpy/ftl.py
+ls :
+         607 main.py
+           0 mpy/
+         578 nand_block_allocator.json
+         332 nandio.py
+           0 sim/
+(snip)
+```
 
 ## References
 
@@ -71,8 +97,8 @@ PIO_OPCODES: array.array = array('H', [40096, 31888, 31788, 31812, 40096, 7304, 
 - [TC58NVG0S3HTA00 Datasheet](https://www.kioxia.com/content/dam/kioxia/newidr/productinfo/datasheet/201910/DST_TC58NVG0S3HTA00-TDE_EN_31435.pdf)
 - [RP2040 Datasheet](https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf)
 - [GitHub - crane-elec/rawnand_test](https://github.com/crane-elec/rawnand_test)
-- [ゼロから学ぶSSD：構造、動作、耐久性のポイント - キオクシア株式会社](https://www.kioxia.com/content/dam/kioxia/ja-jp/business/ssd/asset/SNIA-seminar-202502.pdf)
-  
+- [ゼロから学ぶ SSD：構造、動作、耐久性のポイント - キオクシア株式会社](https://www.kioxia.com/content/dam/kioxia/ja-jp/business/ssd/asset/SNIA-seminar-202502.pdf)
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
