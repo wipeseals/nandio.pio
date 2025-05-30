@@ -86,8 +86,27 @@ class TestUtil:
 
         ],
     )
-    def test_bitor_cs(self, cmd: int, cs: int | None, expect: int):
-        assert Util.bitor_cs(cmd, cs) == expect
+    def test_apply_cs(self, cmd: int, cs: int | None, expect: int):
+        assert Util.apply_cs(cmd, cs) == expect
+
+    @pytest.mark.parametrize(
+        "data_src,cs,expect",
+        [
+            (array.array("I", [0x00, 0x12]), None, array.array("I", [0x300, 0x312])),
+            (array.array("I", [0x00, 0x12]), 0, array.array("I", [0x200, 0x212])),
+            (array.array("I", [0x00, 0x12]), 1, array.array("I", [0x100, 0x112])),
+            (array.array("I", [0xa5, 0x12]), None, array.array("I", [0x3a5, 0x312])),
+            (array.array("I", [0xa5, 0x12]), 0, array.array("I", [0x2a5, 0x212])),
+            (array.array("I", [0xa5, 0x12]), 1, array.array("I", [0x1a5, 0x112])),
+            (array.array("I", [0xff, 0x12]), None, array.array("I", [0x3ff, 0x312])),
+            (array.array("I", [0xff, 0x12]), 0, array.array("I", [0x2ff, 0x212])),
+            (array.array("I", [0xff, 0x12]), 1, array.array("I", [0x1ff, 0x112])),
+        ],
+    )
+    def test_apply_cs_to_data_array(self, data_src: array.array, cs: int | None, expect: array.array):
+        data = array.array("I", data_src)
+        Util.apply_cs_to_data_array(data, cs)
+        assert data.tolist() == expect.tolist()
 
     def test_PIN_DIR_WRITE(self):
         assert PIN_DIR_WRITE == 0b01111111_11111111
@@ -143,7 +162,7 @@ class TestPioCmdBuilderBasics:
         PioCmdBuilder.init_pin(arr)
 
         assert arr[0x0] == self.cmd0(PioCmdId.Bitbang, PIN_DIR_WRITE, 1)
-        assert arr[0x1] == Util.bitor_cs(0x00, None)
+        assert arr[0x1] == Util.apply_cs(0x00, None)
 
     @pytest.mark.parametrize(
         "cs",
@@ -154,14 +173,14 @@ class TestPioCmdBuilderBasics:
         PioCmdBuilder.assert_cs(arr, cs)
 
         assert arr[0x0] == self.cmd0(PioCmdId.Bitbang, PIN_DIR_WRITE, 1)
-        assert arr[0x1] == Util.bitor_cs(0x00, cs)
+        assert arr[0x1] == Util.apply_cs(0x00, cs)
 
     def test_deassert_cs(self):
         arr = array.array("I")
         PioCmdBuilder.deassert_cs(arr)
 
         assert arr[0x0] == self.cmd0(PioCmdId.Bitbang, PIN_DIR_WRITE, 1)
-        assert arr[0x1] == Util.bitor_cs(0x00, None)
+        assert arr[0x1] == Util.apply_cs(0x00, None)
 
     @pytest.mark.parametrize(
         "cs",
@@ -176,7 +195,7 @@ class TestPioCmdBuilderBasics:
         PioCmdBuilder.cmd_latch(arr, cmd, cs)
 
         assert arr[0x0] == self.cmd0(PioCmdId.CmdLatch, PIN_DIR_WRITE, 1)
-        assert arr[0x1] == Util.bitor_cs(cmd, cs)
+        assert arr[0x1] == Util.apply_cs(cmd, cs)
 
     @pytest.mark.parametrize(
         "cs",
@@ -197,7 +216,7 @@ class TestPioCmdBuilderBasics:
         assert arr[0x1] == 0x00  # don't care
         for i, addr in enumerate(addrs):
             # CS が追加されたデータを転送するはず
-            assert arr[i + 2] == Util.bitor_cs(addr, cs)
+            assert arr[i + 2] == Util.apply_cs(addr, cs)
 
     @pytest.mark.parametrize(
         "data_count",
@@ -242,7 +261,7 @@ class TestPioCmdBuilderBasics:
         assert arr[0x1] == 0x00  # don't care
         for i, data in enumerate(datas):
             # CS が追加されたデータを転送するはず
-            assert arr[i + 2] == Util.bitor_cs(data, cs)
+            assert arr[i + 2] == Util.apply_cs(data, cs)
 
     def test_set_irq(self):
         arr = array.array("I")

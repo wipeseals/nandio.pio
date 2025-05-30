@@ -79,19 +79,19 @@ class Util:
             raise ValueError("cs must be 0 or 1 or None")
 
     @classmethod
-    def bitor_cs(
-        cls, data_src: int | array.array, cs: Optional[int]
-    ) -> int | array.array:
+    def apply_cs(
+        cls, data_src: int, cs: Optional[int]
+    ) -> int:
         """data_srcに対して、csを指定してCEB0/CEB1をセットする。単一変数・arrayどちらでも対応。arrayの場合は内容を変更する。"""
-        if isinstance(data_src, int):
-            return cls.gen_ceb_bits(cs) | data_src
-        elif isinstance(data_src, array.array):
-            for i in range(len(data_src)):
-                data_src[i] = cls.gen_ceb_bits(cs) | data_src[i]
-            return data_src
-        else:
-            raise TypeError("data_src must be int, list, or array.array type")
+        return cls.gen_ceb_bits(cs) | data_src
 
+    @classmethod
+    def apply_cs_to_data_array(
+        cls, data_src: array.array, cs: Optional[int]
+    ) -> None:
+        """data_srcに対して、csを指定してCEB0/CEB1をセットする。arrayの場合は内容を変更する。"""
+        for i in range(len(data_src)):
+            data_src[i] = cls.gen_ceb_bits(cs) | data_src[i]
 
 # RBB以外全部Outputに設定するpindir値
 PIN_DIR_WRITE: int = (
@@ -174,7 +174,7 @@ class PioCmdBuilder:
 
     @staticmethod
     def create_cmd_header(
-        cmd_id: PioCmdId,
+        cmd_id: int,
         pindir: int,
         transfer_count: int,
         cmd1: Optional[int],
@@ -194,7 +194,7 @@ class PioCmdBuilder:
             cmd_id=PioCmdId.Bitbang,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,
-            cmd1=Util.bitor_cs(0x00, None),
+            cmd1=Util.apply_cs(0x00, None),
             arr=arr,
         )
 
@@ -209,7 +209,7 @@ class PioCmdBuilder:
             cmd_id=PioCmdId.Bitbang,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,
-            cmd1=Util.bitor_cs(0x00, cs),
+            cmd1=Util.apply_cs(0x00, cs),
             arr=arr,
         )
 
@@ -222,7 +222,7 @@ class PioCmdBuilder:
     def cmd_latch(
         cls,
         arr: array.array,
-        cmd: NandCommandId,
+        cmd: int,
         cs: int,
     ) -> None:
         """Latch command to NAND Flash."""
@@ -230,7 +230,7 @@ class PioCmdBuilder:
             cmd_id=PioCmdId.CmdLatch,
             pindir=PIN_DIR_WRITE,
             transfer_count=1,
-            cmd1=Util.bitor_cs(cmd, cs),
+            cmd1=Util.apply_cs(cmd, cs),
             arr=arr,
         )
 
@@ -242,7 +242,7 @@ class PioCmdBuilder:
         cs: int,
     ) -> None:
         """Latch address to NAND Flash."""
-        Util.bitor_cs(addrs, cs)  # Ensure addresses are modified with CS
+        Util.apply_cs_to_data_array(addrs, cs)  # Ensure addresses are modified with CS
         cls.create_cmd_header(
             cmd_id=PioCmdId.AddrLatch,
             pindir=PIN_DIR_WRITE,
@@ -282,7 +282,7 @@ class PioCmdBuilder:
         cs: int,
     ) -> None:
         """Input data to NAND Flash."""
-        Util.bitor_cs(data, cs)  # Ensure data is modified with CS
+        Util.apply_cs_to_data_array(data, cs)  # Ensure data is modified with CS
         cls.data_input_only_header(arr, len(data))
         arr.extend(data)
 
