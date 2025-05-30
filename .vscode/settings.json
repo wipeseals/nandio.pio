@@ -1,6 +1,7 @@
 {
     "python.languageServer": "Pylance",
     "python.analysis.typeCheckingMode": "basic",
+    "editor.formatOnSave": true,
     "python.analysis.diagnosticSeverityOverrides": {
         "reportMissingModuleSource": "none"
     },
@@ -11,5 +12,49 @@
     ],
     "python.analysis.extraPaths": [
         "~/.micropico-stubs/included"
-    ]
+    ],
+    "micropico.autoConnect": false,
+    "micropico.softResetAfterUpload": true,
+    "micropico.syncFileTypes": [
+        "py",
+        "mpy"
+    ],
+    "micropico.pyIgnore": [
+        "**/.picowgo",
+        "**/.micropico",
+        "**/.vscode",
+        "**/.gitignore",
+        "**/.git",
+        "**/.DS_Store",
+        "**/project.pico-go",
+        "**/env",
+        "**/venv",
+        "**/.venv",
+        "**/.idea",
+        "**/__init__.py",
+        "**/cli.py",
+        "**/simulator.py",
+        "**/.direnv",
+        "**/.github",
+        "**/.pytest_cache",
+        "**/.ruff_cache",
+        "**/nandio_pio.egg-info",
+        "**/output",
+        "**/__pycache__",
+        "**/tests"
+    ],
+    "micropico.syncFolder": "",
+    "micropico.additionalSyncFolders": [
+        "",
+        "sim",
+        "mpy"
+    ],
+    "files.watcherExclude": {
+        "**/target": true
+    },
+    "python.testing.pytestArgs": [
+        "."
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

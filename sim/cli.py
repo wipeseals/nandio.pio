@@ -12,6 +12,7 @@ import logging
 from rich.logging import RichHandler
 from sim.nandio_pio import PioCmdBuilder
 from rich.progress import Progress
+import zlib  # 追加
 
 from sim.simulator import Result, Simulator
 
@@ -24,9 +25,14 @@ class SimScenario:
     payload_f: Callable[[array.array], None]
     test_cycles: int = 100
 
+
 SCENARIOS: List[SimScenario] = [
-    SimScenario("reset", lambda arr: PioCmdBuilder.seq_reset(arr=arr, cs=0), test_cycles=100),
-    SimScenario("read_id", lambda arr: PioCmdBuilder.seq_read_id(arr=arr, cs=0), test_cycles=100),
+    SimScenario(
+        "reset", lambda arr: PioCmdBuilder.seq_reset(arr=arr, cs=0), test_cycles=100
+    ),
+    SimScenario(
+        "read_id", lambda arr: PioCmdBuilder.seq_read_id(arr=arr, cs=0), test_cycles=100
+    ),
     SimScenario(
         "read",
         lambda arr: PioCmdBuilder.seq_read(
@@ -42,7 +48,7 @@ SCENARIOS: List[SimScenario] = [
             column_addr=0,
             page_addr=0,
             block_addr=1023,
-            data=array.array('I', range(32)),  # dataもarray.arrayで渡す
+            data=array.array("I", range(32)),  # dataもarray.arrayで渡す
         ),
         test_cycles=300,
     ),
@@ -51,7 +57,11 @@ SCENARIOS: List[SimScenario] = [
         lambda arr: PioCmdBuilder.seq_erase(arr=arr, cs=0, block_addr=1023),
         test_cycles=200,
     ),
-    SimScenario("status_read", lambda arr: PioCmdBuilder.seq_status_read(arr=arr, cs=0), test_cycles=50),
+    SimScenario(
+        "status_read",
+        lambda arr: PioCmdBuilder.seq_status_read(arr=arr, cs=0),
+        test_cycles=50,
+    ),
 ]
 
 
@@ -85,14 +95,9 @@ def cli(
     "--bin_path",
     type=click.Path(exists=True, path_type=Path),
 )
-@click.option(
-    "--py_path",
-    type=click.Path(exists=True, path_type=Path),
-)
 def asm(
     pio_path: Path,
     bin_path: Path | None = None,
-    py_path: Path | None = None,
 ):
     """Assemble the PIO program."""
     if not pio_path.exists():
@@ -100,20 +105,15 @@ def asm(
         return
     if bin_path is None:
         bin_path = pio_path.with_suffix(".bin")
-    if py_path is None:
-        py_path = pio_path.with_suffix(".py")
 
     program_str = Path(pio_path).read_text(encoding="utf-8")
-    opcodes: array.array = adafruit_pioasm.assemble(program_str)
-    # save binary output
-    py_str = f"# generated from {pio_path.name}. created_at={datetime.datetime.now()}\nimport array{os.linesep}PIO_OPCODES: array.array = {opcodes}"
-    bin_path.write_bytes(opcodes.tobytes())
-    py_path.write_text(py_str, encoding="utf-8")
+    opcodes_arr: array.array = adafruit_pioasm.assemble(program_str)
+    bin_path.write_bytes(opcodes_arr.tobytes())
 
     console.print(
-        f"[green]PIO program assembled successfully: binary={bin_path.absolute()}, python={py_path.absolute()}[/green]"
+        f"[green]PIO program assembled successfully![/green]\n"
+        f"Output binary saved to: {bin_path.absolute()}"
     )
-    console.print(f"```python{os.linesep}{py_str}{os.linesep}```")
 
 
 @cli.command()
@@ -162,7 +162,7 @@ def sim(
         for scenario in target_scenarios:
             logging.debug(f"Running scenario: {scenario}")
             # payload_fにarray.arrayを渡してtx_fifo_entriesを生成
-            tx_fifo_entries = array.array('I')
+            tx_fifo_entries = array.array("I")
             scenario.payload_f(tx_fifo_entries)
             ret: Result = Simulator.execute(
                 program_str=program_str,

@@ -420,7 +420,7 @@ class Simulator:
         test_cycles: int,
         tx_fifo_entries: List[int] | array.array = [],
         # dequeue が速すぎると、simulator上のFIFOが常に空になってしまう
-        dequeue_period_cyc: int = 8, 
+        dequeue_period_cyc: int = 6,
         input_source: Callable[[pioemu.State], int]
         | Callable[[int], int]
         | None = None,
@@ -452,6 +452,8 @@ class Simulator:
             shift_osr_right=True,
             side_set_count=5,
             side_set_base=10,
+            auto_push=True,
+            push_threshold=8,
         )
 
         # stepを進め、pinの状態, fifoの状態を収集
