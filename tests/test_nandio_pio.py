@@ -2,7 +2,7 @@ from pathlib import Path
 import pytest
 from typing import List
 import array
-from src.nandio_pio import (
+from sim.nandio_pio import (
     PIN_DIR_READ,
     PIN_DIR_WRITE,
     NandAddr,
@@ -11,7 +11,7 @@ from src.nandio_pio import (
     PioCmdId,
     Util,
 )
-from src.simulator import Result, Simulator
+from sim.simulator import Result, Simulator
 
 class TestUtil:
 

@@ -10,10 +10,10 @@ import rich_click as click
 from pathlib import Path
 import logging
 from rich.logging import RichHandler
-from src.nandio_pio import PioCmdBuilder
+from sim.nandio_pio import PioCmdBuilder
 from rich.progress import Progress
 
-from src.simulator import Result, Simulator
+from sim.simulator import Result, Simulator
 
 console = rich.get_console()
 
