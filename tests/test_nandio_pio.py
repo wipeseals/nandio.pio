@@ -13,8 +13,8 @@ from sim.nandio_pio import (
 )
 from sim.simulator import Result, Simulator
 
-class TestUtil:
 
+class TestUtil:
     @pytest.mark.parametrize(
         "bitpos,expect",
         [
@@ -62,14 +62,13 @@ class TestUtil:
             (0x0001, 0x0000, 0x0001_0000),
             (0x0000, 0x0001, 0x0000_0001),
             (0x1234, 0x5678, 0x1234_5678),
-            (0xffff, 0xffff, 0xffff_ffff),
-            (0x1234, 0xffff, 0x1234_ffff),
-            (0xffff, 0x5678, 0xffff_5678),
-        ]
+            (0xFFFF, 0xFFFF, 0xFFFF_FFFF),
+            (0x1234, 0xFFFF, 0x1234_FFFF),
+            (0xFFFF, 0x5678, 0xFFFF_5678),
+        ],
     )
     def test_combine_halfword(self, high: int, low: int, expect: int):
         assert Util.combine_halfword(low, high) == expect
-        
 
     @pytest.mark.parametrize(
         "cmd,cs,expect",
@@ -77,13 +76,12 @@ class TestUtil:
             (0x00, None, 0x300),
             (0x00, 0, 0x200),
             (0x00, 1, 0x100),
-            (0xa5, None, 0x3a5),
-            (0xa5, 0, 0x2a5),
-            (0xa5, 1, 0x1a5),
-            (0xff, None, 0x3ff),
-            (0xff, 0, 0x2ff),
-            (0xff, 1, 0x1ff),
-
+            (0xA5, None, 0x3A5),
+            (0xA5, 0, 0x2A5),
+            (0xA5, 1, 0x1A5),
+            (0xFF, None, 0x3FF),
+            (0xFF, 0, 0x2FF),
+            (0xFF, 1, 0x1FF),
         ],
     )
     def test_apply_cs(self, cmd: int, cs: int | None, expect: int):
@@ -95,15 +93,17 @@ class TestUtil:
             (array.array("I", [0x00, 0x12]), None, array.array("I", [0x300, 0x312])),
             (array.array("I", [0x00, 0x12]), 0, array.array("I", [0x200, 0x212])),
             (array.array("I", [0x00, 0x12]), 1, array.array("I", [0x100, 0x112])),
-            (array.array("I", [0xa5, 0x12]), None, array.array("I", [0x3a5, 0x312])),
-            (array.array("I", [0xa5, 0x12]), 0, array.array("I", [0x2a5, 0x212])),
-            (array.array("I", [0xa5, 0x12]), 1, array.array("I", [0x1a5, 0x112])),
-            (array.array("I", [0xff, 0x12]), None, array.array("I", [0x3ff, 0x312])),
-            (array.array("I", [0xff, 0x12]), 0, array.array("I", [0x2ff, 0x212])),
-            (array.array("I", [0xff, 0x12]), 1, array.array("I", [0x1ff, 0x112])),
+            (array.array("I", [0xA5, 0x12]), None, array.array("I", [0x3A5, 0x312])),
+            (array.array("I", [0xA5, 0x12]), 0, array.array("I", [0x2A5, 0x212])),
+            (array.array("I", [0xA5, 0x12]), 1, array.array("I", [0x1A5, 0x112])),
+            (array.array("I", [0xFF, 0x12]), None, array.array("I", [0x3FF, 0x312])),
+            (array.array("I", [0xFF, 0x12]), 0, array.array("I", [0x2FF, 0x212])),
+            (array.array("I", [0xFF, 0x12]), 1, array.array("I", [0x1FF, 0x112])),
         ],
     )
-    def test_apply_cs_to_data_array(self, data_src: array.array, cs: int | None, expect: array.array):
+    def test_apply_cs_to_data_array(
+        self, data_src: array.array, cs: int | None, expect: array.array
+    ):
         data = array.array("I", data_src)
         Util.apply_cs_to_data_array(data, cs)
         assert data.tolist() == expect.tolist()
@@ -113,6 +113,7 @@ class TestUtil:
 
     def test_PIN_DIR_READ(self):
         assert PIN_DIR_READ == 0b01111111_00000000
+
 
 class TestNandAddr:
     @pytest.mark.parametrize(
@@ -125,8 +126,10 @@ class TestNandAddr:
             (0, 0, 0b1010101011, [0x00, 0x00, 0b11000000, 0b10101010]),
         ],
     )
-    def test_create_full_addr(self, column_addr: int, page_addr: int, block_addr: int, expect: List[int]):
-        arr = array.array("I", [0, 0, 0, 0])
+    def test_create_full_addr(
+        self, column_addr: int, page_addr: int, block_addr: int, expect: List[int]
+    ):
+        arr = array.array("B", [0, 0, 0, 0])
         NandAddr.create_full_addr(arr, column_addr, page_addr, block_addr)
         assert arr.tolist() == expect
 
@@ -136,18 +139,19 @@ class TestNandAddr:
             (0, [0x00, 0x00]),
             (0b10101010, [0b10101010, 0x00]),
             (0b10101010_00000000, [0x00, 0b10101010]),
-            (0xffff, [0xff, 0xff]),
+            (0xFFFF, [0xFF, 0xFF]),
         ],
     )
     def test_create_block_addr(self, block_addr: int, expect: List[int]):
-        arr = array.array("I", [0, 0])
+        arr = array.array("B", [0, 0])
         NandAddr.create_block_addr(arr, block_addr)
         assert arr.tolist() == expect
+
 
 class TestPioCmdBuilderBasics:
     @staticmethod
     def cmd0(
-        cmd: PioCmdId,
+        cmd: int,
         dir: int,
         count: int,
     ) -> int:
@@ -158,29 +162,29 @@ class TestPioCmdBuilderBasics:
         return (cmd << 28) | ((count - 1) << 16) | dir
 
     def test_init_pin(self):
-        arr = array.array("I")
-        PioCmdBuilder.init_pin(arr)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.init_pin(pio_prg_arr)
 
-        assert arr[0x0] == self.cmd0(PioCmdId.Bitbang, PIN_DIR_WRITE, 1)
-        assert arr[0x1] == Util.apply_cs(0x00, None)
+        assert pio_prg_arr[0x0] == self.cmd0(PioCmdId.Bitbang, PIN_DIR_WRITE, 1)
+        assert pio_prg_arr[0x1] == Util.apply_cs(0x00, None)
 
     @pytest.mark.parametrize(
         "cs",
         [0, 1, None],
     )
     def test_assert_cs(self, cs: int | None):
-        arr = array.array("I")
-        PioCmdBuilder.assert_cs(arr, cs)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.assert_cs(pio_prg_arr, cs)
 
-        assert arr[0x0] == self.cmd0(PioCmdId.Bitbang, PIN_DIR_WRITE, 1)
-        assert arr[0x1] == Util.apply_cs(0x00, cs)
+        assert pio_prg_arr[0x0] == self.cmd0(PioCmdId.Bitbang, PIN_DIR_WRITE, 1)
+        assert pio_prg_arr[0x1] == Util.apply_cs(0x00, cs)
 
     def test_deassert_cs(self):
-        arr = array.array("I")
-        PioCmdBuilder.deassert_cs(arr)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.deassert_cs(pio_prg_arr)
 
-        assert arr[0x0] == self.cmd0(PioCmdId.Bitbang, PIN_DIR_WRITE, 1)
-        assert arr[0x1] == Util.apply_cs(0x00, None)
+        assert pio_prg_arr[0x0] == self.cmd0(PioCmdId.Bitbang, PIN_DIR_WRITE, 1)
+        assert pio_prg_arr[0x1] == Util.apply_cs(0x00, None)
 
     @pytest.mark.parametrize(
         "cs",
@@ -191,11 +195,11 @@ class TestPioCmdBuilderBasics:
         [NandCommandId.RESET, NandCommandId.READ_ID],
     )
     def test_cmd_latch(self, cs: int | None, cmd: int):
-        arr = array.array("I")
-        PioCmdBuilder.cmd_latch(arr, cmd, cs)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.cmd_latch(pio_prg_arr, cmd, cs)
 
-        assert arr[0x0] == self.cmd0(PioCmdId.CmdLatch, PIN_DIR_WRITE, 1)
-        assert arr[0x1] == Util.apply_cs(cmd, cs)
+        assert pio_prg_arr[0x0] == self.cmd0(PioCmdId.CmdLatch, PIN_DIR_WRITE, 1)
+        assert pio_prg_arr[0x1] == Util.apply_cs(cmd, cs)
 
     @pytest.mark.parametrize(
         "cs",
@@ -209,36 +213,42 @@ class TestPioCmdBuilderBasics:
         ],
     )
     def test_addr_latch(self, cs: int, addrs: array.array):
-        arr = array.array("I")
-        PioCmdBuilder.addr_latch(arr, addrs, cs)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.addr_latch(pio_prg_arr, addrs, cs)
 
-        assert arr[0x0] == self.cmd0(PioCmdId.AddrLatch, PIN_DIR_WRITE, len(addrs))
-        assert arr[0x1] == 0x00  # don't care
+        assert pio_prg_arr[0x0] == self.cmd0(
+            PioCmdId.AddrLatch, PIN_DIR_WRITE, len(addrs)
+        )
+        assert pio_prg_arr[0x1] == 0x00  # don't care
         for i, addr in enumerate(addrs):
             # CS が追加されたデータを転送するはず
-            assert arr[i + 2] == Util.apply_cs(addr, cs)
+            assert pio_prg_arr[i + 2] == Util.apply_cs(addr, cs)
 
     @pytest.mark.parametrize(
         "data_count",
         [1, 5, 2048],
     )
     def test_data_output(self, data_count: int):
-        arr = array.array("I")
-        PioCmdBuilder.data_output(arr, data_count)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.data_output(pio_prg_arr, data_count)
 
-        assert arr[0x0] == self.cmd0(PioCmdId.DataOutput, PIN_DIR_READ, data_count)
-        assert arr[0x1] == 0x00  # don't care
+        assert pio_prg_arr[0x0] == self.cmd0(
+            PioCmdId.DataOutput, PIN_DIR_READ, data_count
+        )
+        assert pio_prg_arr[0x1] == 0x00  # don't care
 
     @pytest.mark.parametrize(
         "data_count",
         [1, 5, 2048],
     )
     def test_data_input_only_header(self, data_count: int):
-        arr = array.array("I")
-        PioCmdBuilder.data_input_only_header(arr, data_count)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.data_input_only_header(pio_prg_arr, data_count)
 
-        assert arr[0x0] == self.cmd0(PioCmdId.DataInput, PIN_DIR_WRITE, data_count)
-        assert arr[0x1] == 0x00  # don't care
+        assert pio_prg_arr[0x0] == self.cmd0(
+            PioCmdId.DataInput, PIN_DIR_WRITE, data_count
+        )
+        assert pio_prg_arr[0x1] == 0x00  # don't care
 
     @pytest.mark.parametrize(
         "cs",
@@ -254,28 +264,30 @@ class TestPioCmdBuilderBasics:
         ],
     )
     def test_data_input(self, cs: int, datas: array.array):
-        arr = array.array("I")
-        PioCmdBuilder.data_input(arr, datas, cs)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.data_input(pio_prg_arr, datas, cs)
 
-        assert arr[0x0] == self.cmd0(PioCmdId.DataInput, PIN_DIR_WRITE, len(datas))
-        assert arr[0x1] == 0x00  # don't care
+        assert pio_prg_arr[0x0] == self.cmd0(
+            PioCmdId.DataInput, PIN_DIR_WRITE, len(datas)
+        )
+        assert pio_prg_arr[0x1] == 0x00  # don't care
         for i, data in enumerate(datas):
             # CS が追加されたデータを転送するはず
-            assert arr[i + 2] == Util.apply_cs(data, cs)
+            assert pio_prg_arr[i + 2] == Util.apply_cs(data, cs)
 
     def test_set_irq(self):
-        arr = array.array("I")
-        PioCmdBuilder.set_irq(arr)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.set_irq(pio_prg_arr)
 
-        assert arr[0x0] == self.cmd0(PioCmdId.SetIrq, PIN_DIR_WRITE, 1)
-        assert arr[0x1] == 0x00
+        assert pio_prg_arr[0x0] == self.cmd0(PioCmdId.SetIrq, PIN_DIR_WRITE, 1)
+        assert pio_prg_arr[0x1] == 0x00
 
     def test_wait_rbb(self):
-        arr = array.array("I")
-        PioCmdBuilder.wait_rbb(arr)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.wait_rbb(pio_prg_arr)
 
-        assert arr[0x0] == self.cmd0(PioCmdId.WaitRbb, PIN_DIR_WRITE, 1)
-        assert arr[0x1] == 0x00
+        assert pio_prg_arr[0x0] == self.cmd0(PioCmdId.WaitRbb, PIN_DIR_WRITE, 1)
+        assert pio_prg_arr[0x1] == 0x00
 
 
 class TestPioCmdBuilderSequences:
@@ -287,12 +299,12 @@ class TestPioCmdBuilderSequences:
         [0, 1],
     )
     def test_seq_reset(self, cs: int):
-        arr = array.array("I")
-        PioCmdBuilder.seq_reset(arr, cs)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.seq_reset(pio_prg_arr, cs)
         ret: Result = Simulator.execute(
             program_str=self.pio_text,
             test_cycles=100,
-            tx_fifo_entries=arr,
+            tx_fifo_entries=pio_prg_arr,
         )
 
         assert ret.event_df.iloc[0]["event"] == "cmd_in"
@@ -314,12 +326,12 @@ class TestPioCmdBuilderSequences:
         [1, 5],
     )
     def test_seq_read_id(self, cs: int, offset: int, data_count: int):
-        arr = array.array("I")
-        PioCmdBuilder.seq_read_id(arr, cs, offset=offset, data_count=data_count)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.seq_read_id(pio_prg_arr, cs, offset=offset, data_count=data_count)
         ret: Result = Simulator.execute(
             program_str=self.pio_text,
             test_cycles=100,
-            tx_fifo_entries=arr,
+            tx_fifo_entries=pio_prg_arr,
         )
 
         # READ ID
@@ -366,12 +378,14 @@ class TestPioCmdBuilderSequences:
         block_addr: int,
         data_count: int,
     ):
-        arr = array.array("I")
-        PioCmdBuilder.seq_read(arr, cs, column_addr, page_addr, block_addr, data_count)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.seq_read(
+            pio_prg_arr, cs, column_addr, page_addr, block_addr, data_count
+        )
         ret: Result = Simulator.execute(
             program_str=self.pio_text,
             test_cycles=100 + data_count * 10,
-            tx_fifo_entries=arr,
+            tx_fifo_entries=pio_prg_arr,
         )
 
         # read 1st cycle
@@ -416,12 +430,12 @@ class TestPioCmdBuilderSequences:
         [0, 1],
     )
     def test_seq_read_status(self, cs: int):
-        arr = array.array("I")
-        PioCmdBuilder.seq_status_read(arr, cs)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.seq_status_read(pio_prg_arr, cs)
         ret: Result = Simulator.execute(
             program_str=self.pio_text,
             test_cycles=50,
-            tx_fifo_entries=arr,
+            tx_fifo_entries=pio_prg_arr,
         )
 
         # Read Status
@@ -438,11 +452,17 @@ class TestPioCmdBuilderSequences:
         "cs,column_addr,page_addr,block_addr,datas",
         [
             (0, 0, 0, 0, array.array("I", [0xAA, 0x99, 0x55, 0x66])),
-            (1, 0, 0, 3, array.array("I", [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88])),
+            (
+                1,
+                0,
+                0,
+                3,
+                array.array("I", [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]),
+            ),
             (0, 128, 33, 256, array.array("I", list(range(15)))),
             (1, 256, 2, 3, array.array("I", list(range(512)))),
             # too long
-            # (0, 512, 16, 1023, array.array("I", list(range(2048)))),
+            # (0, 512, 16, 1023, array.array("B", list(range(2048)))),
         ],
     )
     def test_seq_program(
@@ -453,12 +473,14 @@ class TestPioCmdBuilderSequences:
         block_addr: int,
         datas: array.array,
     ):
-        arr = array.array("I")
-        PioCmdBuilder.seq_program(arr, cs, column_addr, page_addr, block_addr, datas)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.seq_program(
+            pio_prg_arr, cs, column_addr, page_addr, block_addr, datas
+        )
         ret: Result = Simulator.execute(
             program_str=self.pio_text,
             test_cycles=100 + len(datas) * 10,
-            tx_fifo_entries=arr,
+            tx_fifo_entries=pio_prg_arr,
         )
 
         # write 1st cycle
@@ -494,10 +516,7 @@ class TestPioCmdBuilderSequences:
             assert ret.event_df.iloc[i + 5]["ceb1"] == (0 if cs == 1 else 1)
         # Write 2nd cycle
         assert ret.event_df.iloc[len(datas) + 5]["event"] == "cmd_in"
-        assert (
-            ret.event_df.iloc[len(datas) + 5]["io_raw"]
-            == NandCommandId.PROGRAM_2ND
-        )
+        assert ret.event_df.iloc[len(datas) + 5]["io_raw"] == NandCommandId.PROGRAM_2ND
         assert ret.event_df.iloc[len(datas) + 5]["io_dir_raw"] == 0xFF
         assert ret.event_df.iloc[len(datas) + 5]["ceb0"] == (0 if cs == 0 else 1)
         assert ret.event_df.iloc[len(datas) + 5]["ceb1"] == (0 if cs == 1 else 1)
@@ -527,12 +546,12 @@ class TestPioCmdBuilderSequences:
         ],
     )
     def test_seq_erase(self, cs: int, block_addr: int):
-        arr = array.array("I")
-        PioCmdBuilder.seq_erase(arr, cs, block_addr)
+        pio_prg_arr = array.array("I")
+        PioCmdBuilder.seq_erase(pio_prg_arr, cs, block_addr)
         ret: Result = Simulator.execute(
             program_str=self.pio_text,
             test_cycles=100,
-            tx_fifo_entries=arr,
+            tx_fifo_entries=pio_prg_arr,
         )
 
         # Erase 1st cycle
