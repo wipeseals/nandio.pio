@@ -1,5 +1,5 @@
 import json
-from mpy.nandio import NandIo, NandCommander
+from mpy.driver import NandIo, NandCommander
 from sim.nandio_pio import BLOCK, CHIP, LBA, PAGE, PBA, NandConfig
 
 
