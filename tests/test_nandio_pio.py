@@ -129,7 +129,7 @@ class TestNandAddr:
     def test_create_full_addr(
         self, column_addr: int, page_addr: int, block_addr: int, expect: List[int]
     ):
-        arr = array.array("B", [0, 0, 0, 0])
+        arr = array.array("B")
         NandAddr.create_full_addr(arr, column_addr, page_addr, block_addr)
         assert arr.tolist() == expect
 
@@ -143,7 +143,7 @@ class TestNandAddr:
         ],
     )
     def test_create_block_addr(self, block_addr: int, expect: List[int]):
-        arr = array.array("B", [0, 0])
+        arr = array.array("B")
         NandAddr.create_block_addr(arr, block_addr)
         assert arr.tolist() == expect
 

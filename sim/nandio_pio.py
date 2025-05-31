@@ -231,17 +231,16 @@ class NandAddr:
         """
         ca = column_addr & 0xFFF
         pa = (page_addr & 0x3F) | ((block_addr & 0x3FF) << 6)
-        arr[0] = ca & 0xFF
-        arr[1] = (ca >> 8) & 0x0F
-        arr[2] = pa & 0xFF
-        arr[3] = (pa >> 8) & 0xFF
+        arr.append(ca & 0xFF)
+        arr.append((ca >> 8) & 0x0F)
+        arr.append(pa & 0xFF)
+        arr.append((pa >> 8) & 0xFF)
 
     @staticmethod
     def create_block_addr(arr: array.array, block_addr: BLOCK) -> None:
         """Block Addressを2byteのAddressInput用に変換する。Auto Block Erase用。"""
-
-        arr[0] = block_addr & 0xFF
-        arr[1] = (block_addr >> 8) & 0xFF
+        arr.append(block_addr & 0xFF)
+        arr.append((block_addr >> 8) & 0xFF)
 
 
 class PioCmdId:
@@ -405,7 +404,7 @@ class PioCmdBuilder:
         cs: int | None = None,
     ) -> None:
         """Latch full address to NAND Flash."""
-        addrs = array.array("I", [0, 0, 0, 0])  # 4-byte address
+        addrs = array.array("I")
         NandAddr.create_full_addr(addrs, column_addr, page_addr, block_addr)
         cls.addr_latch(arr, addrs, cs)
 
@@ -417,7 +416,7 @@ class PioCmdBuilder:
         cs: int | None = None,
     ) -> None:
         """Latch block address to NAND Flash."""
-        addrs = array.array("I", [0, 0])  # 2-byte address
+        addrs = array.array("I")
         NandAddr.create_block_addr(addrs, block_addr)
         cls.addr_latch(arr, addrs, cs)
 
@@ -443,7 +442,8 @@ class PioCmdBuilder:
         cls.init_pin(arr)
         cls.assert_cs(arr, cs=cs)
         cls.cmd_latch(arr, cmd=NandCommandId.READ_ID, cs=cs)
-        addrs = array.array("I", [offset])  # 1-byte address
+        addrs = array.array("I")
+        addrs.append(offset)  # 1-byte address
         cls.addr_latch(arr, addrs=addrs, cs=cs)
         cls.data_output(arr, data_count=data_count)
         cls.deassert_cs(arr)
