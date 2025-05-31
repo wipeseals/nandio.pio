@@ -428,7 +428,6 @@ class PioCmdBuilder:
         cls.cmd_latch(arr, cmd=NandCommandId.RESET, cs=cs)
         cls.wait_rbb(arr)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
 
     @classmethod
     def seq_read_id(
@@ -447,7 +446,6 @@ class PioCmdBuilder:
         cls.addr_latch(arr, addrs=addrs, cs=cs)
         cls.data_output(arr, data_count=data_count)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
 
     @classmethod
     def seq_read(
@@ -468,7 +466,6 @@ class PioCmdBuilder:
         cls.wait_rbb(arr)
         cls.data_output(arr, data_count=data_count)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
 
     @classmethod
     def seq_status_read(
@@ -482,7 +479,6 @@ class PioCmdBuilder:
         cls.cmd_latch(arr, cmd=NandCommandId.STATUS_READ, cs=cs)
         cls.data_output(arr, data_count=1)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
 
     @classmethod
     def seq_program(
@@ -505,7 +501,6 @@ class PioCmdBuilder:
         cls.cmd_latch(arr, cmd=NandCommandId.STATUS_READ, cs=cs)
         cls.data_output(arr, data_count=1)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
 
     @classmethod
     def seq_erase(
@@ -524,4 +519,3 @@ class PioCmdBuilder:
         cls.cmd_latch(arr, cmd=NandCommandId.STATUS_READ, cs=cs)
         cls.data_output(arr, data_count=1)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)

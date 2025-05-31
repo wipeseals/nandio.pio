@@ -1,9 +1,18 @@
 import array
 import time
 
-from sim.nandio_pio import NandConfig, NandAddr, NandCommandId, NandStatus, PinAssign
+from sim.nandio_pio import (
+    NandConfig,
+    NandAddr,
+    NandCommandId,
+    NandStatus,
+    PinAssign,
+    PioCmdBuilder,
+)
+import nandio as nandio_pio
 
 from machine import Pin
+import rp2
 
 
 class NandIo:
@@ -169,7 +178,7 @@ class NandIo:
         return True
 
 
-class NandCommander:
+class FwNandCommander:
     def __init__(
         self,
         nandio: NandIo,
@@ -311,3 +320,79 @@ class NandCommander:
         is_ok = (status & NandStatus.PROGRAM_ERASE_FAIL) == 0
 
         return is_ok
+
+
+class PioNandCommander:
+    def __init__(
+        self,
+        nandio: NandIo,
+        timeout_ms: int = 1000,
+    ) -> None:
+        self._timeout_ms = timeout_ms
+        self._nandio = nandio
+
+    def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
+        required_freq = int(83e6)  # TODO: これ以下にしておく
+        sm = rp2.StateMachine(0)
+        sm.init(
+            prog=nandio_pio.PIO_OPCODES,
+            freq=-1,  # TODO: 疎通できたら姑息可
+            in_base=self._nandio._io0,
+            out_base=self._nandio._io0,
+            set_base=self._nandio._io0,
+            jmp_pin=None,
+            sideset_base=self._nandio._cle,  # [REB,WEB,WPB,ALE,CLE]
+            in_shiftdir=rp2.PIO.SHIFT_LEFT,
+            out_shiftdir=rp2.PIO.SHIFT_RIGHT,
+            push_thresh=None,
+            pull_thresh=None,
+        )
+        sm.active(1)
+
+        tx_data = array.array("I")
+        PioCmdBuilder.seq_reset(tx_data, cs=chip_index)
+        PioCmdBuilder.seq_read_id(tx_data, cs=chip_index)
+        PioCmdBuilder.set_irq(tx_data)
+
+        # TODO: DMAに置き換え
+        # TODO: DMA完了後、データの受信まではIRQとDMAの完了で待つ
+        # send data
+        for payload in tx_data:
+            print(f"Sending payload: {payload:#010x}")
+            sm.put(payload)
+
+        # receive data
+        rx_data = array.array("I", [0] * num_bytes)
+        # wait data
+        while not sm.rx_fifo():
+            pass
+        sm.get(rx_data)
+        print(f"Received data: {rx_data}")
+
+        pass
+
+    def read_page(
+        self,
+        chip_index: int,
+        block: int,
+        page: int,
+        col: int = 0,
+        num_bytes: int = NandConfig.PAGE_ALL_BYTES,
+    ) -> bytearray | None:
+        pass
+
+    def read_status(self, chip_index: int) -> int:
+        pass
+
+    def erase_block(self, chip_index: int, block: int) -> bool:
+        pass
+
+    def program_page(
+        self,
+        chip_index: int,
+        block: int,
+        page: int,
+        data: bytearray,
+        col: int = 0,
+    ) -> bool:
+        pass

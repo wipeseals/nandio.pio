@@ -1,5 +1,12 @@
+from mpy.driver import NandIo, PioNandCommander
 from mpy.ftl import FlashTranslationLayer
 from sim.nandio_pio import LBA, NandConfig
+
+
+def test_pio() -> None:
+    nandio = NandIo()
+    pio_commander = PioNandCommander(nandio)
+    pio_commander.read_id(0)
 
 
 def main() -> None:
@@ -17,4 +24,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    test_pio()
+    # main()

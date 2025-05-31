@@ -115,13 +115,16 @@ def asm(
 
     program_str = Path(pio_path).read_text(encoding="utf-8")
     program_crc = zlib.crc32(Path(pio_path).read_bytes())
-    opcodes: array.array = adafruit_pioasm.assemble(program_str)
+    # array.array("H") u16
+    opcodes_arr: array.array = adafruit_pioasm.assemble(program_str)
+    # 2byte * 32entry の opcode_arr を little endian で 4byte * 8entry = 32byteのリストにする
+    opcodes_list: List[int] = list(opcodes_arr)
     # save binary output
     py_str = (
         f"# generated from {pio_path.name}. created_at={datetime.datetime.now()} crc32=0x{program_crc:08x}\n"
-        f"import array\nPIO_OPCODES: array.array = {opcodes}"
+        f"PIO_OPCODES = {opcodes_list}\n"
     )
-    bin_path.write_bytes(opcodes.tobytes())
+    bin_path.write_bytes(opcodes_arr.tobytes())
     py_path.write_text(py_str, encoding="utf-8")
 
     console.print(
