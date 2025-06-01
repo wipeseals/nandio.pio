@@ -12,6 +12,7 @@ def test_pio() -> None:
     # pio_commander.read_id(0)
 
     chip_index = 0
+    num_bytes = 5
     required_freq = int(83e6)  # TODO: これ以下にしておく
 
     class PinConfig:
@@ -37,11 +38,6 @@ def test_pio() -> None:
             nandio._io7,
             nandio._ceb0,
             nandio._ceb1,
-            nandio._cle,
-            nandio._ale,
-            nandio._wpb,
-            nandio._web,
-            nandio._reb,
         ]
         sideset_pins = [
             nandio._cle,
@@ -117,14 +113,21 @@ def test_pio() -> None:
             | Util.bit_on(PinConfig.SIDESET_WPB_IDX)
         )
 
+    print(f"INIT   : {SidesetState.INIT:#010b}")
+    print(f"DOUT_0 : {SidesetState.DOUT_0:#010b}")
+    print(f"DOUT_1 : {SidesetState.DOUT_1:#010b}")
+    print(f"DIN_0  : {SidesetState.DIN_0:#010b}")
+    print(f"DIN_1  : {SidesetState.DIN_1:#010b}")
+    print(f"CLE_0  : {SidesetState.CLE_0:#010b}")
+    print(f"CLE_1  : {SidesetState.CLE_1:#010b}")
+    print(f"ALE_0  : {SidesetState.ALE_0:#010b}")
+    print(f"ALE_1  : {SidesetState.ALE_1:#010b}")
+
     @rp2.asm_pio(
         out_init=[rp2.PIO.OUT_HIGH] * len(PinConfig.out_pins),
         sideset_init=[rp2.PIO.OUT_HIGH] * len(PinConfig.sideset_pins),
         in_shiftdir=rp2.PIO.SHIFT_LEFT,
         out_shiftdir=rp2.PIO.SHIFT_RIGHT,
-        autopush=False,
-        autopull=False,
-        fifo_join=rp2.PIO.JOIN_TX | rp2.PIO.JOIN_RX,
     )
     def nandio_pio_asm():
         wrap_target()
@@ -148,7 +151,7 @@ def test_pio() -> None:
         #         { ceb1, ceb0, io7, io6, io5, io4, io3, io2, io1, io0 }
         label("bitbang_main")
         out(pins, 10).side(SidesetState.INIT)
-        jmp("setup")
+        jmp("setup").side(SidesetState.INIT)
 
         ########################################################################
         # cmd latch command
@@ -159,7 +162,7 @@ def test_pio() -> None:
         # cmd_1 = { ceb[1:0], nand_cmd_id[7:0] }
         label("cmd_latch_main")
         out(pins, 10).side(SidesetState.CLE_0)  # CLE=H /WE=L
-        nop().side(SidesetState.CLE_1)  #  CLE=H /WE=H (t_cls>12ns)
+        nop().side(SidesetState.CLE_0)  #  CLE=H /WE=H (t_cls>12ns)
         jmp("setup").side(SidesetState.CLE_1)  #  CLE=1, /WE=H (t_clh>5ns)
 
         ########################################################################
@@ -188,7 +191,7 @@ def test_pio() -> None:
         in_(pins, 8).side(SidesetState.DOUT_1)  # /RE=H
         push(block).side(SidesetState.DOUT_1)  # /RE=H (t_rh>5ns)
         jmp(x_dec, "data_out_main").side(SidesetState.DOUT_1)  # /RE=H
-        jmp("setup").side(SidesetState.INIT)
+        jmp("setup").side(SidesetState.DOUT_1)
 
         ########################################################################
         # data input command
@@ -222,38 +225,34 @@ def test_pio() -> None:
     sm = rp2.StateMachine(0)
     sm.init(
         prog=nandio_pio_asm,
-        freq=-1,  # TODO: 疎通できたら姑息可
-        in_base=nandio._io0,
-        out_base=nandio._io0,
-        set_base=nandio._io0,
-        jmp_pin=None,
-        sideset_base=nandio._cle,  # [REB,WEB,WPB,ALE,CLE]
+        in_base=0,
+        out_base=0,
+        sideset_base=10,
         in_shiftdir=rp2.PIO.SHIFT_LEFT,
         out_shiftdir=rp2.PIO.SHIFT_RIGHT,
-        push_thresh=None,
-        pull_thresh=None,
     )
+    sm.irq(lambda sm: print(f"IRQ triggered by SM {sm}"))
     sm.active(1)
 
     tx_data = array.array("I")
     PioCmdBuilder.seq_reset(tx_data, cs=chip_index)
     PioCmdBuilder.seq_read_id(tx_data, cs=chip_index)
     PioCmdBuilder.set_irq(tx_data)
+    print(f"TX Data: {tx_data}")
 
     # TODO: DMAに置き換え
     # TODO: DMA完了後、データの受信まではIRQとDMAの完了で待つ
     # send data
     for payload in tx_data:
-        print(f"Sending payload: {payload:#010x}")
+        print(f"Sending payload: {payload:#010x}, tx_fifo: {sm.tx_fifo()}")
         sm.put(payload)
 
     # receive data
     rx_data = array.array("I", [0] * num_bytes)
     # wait data
-    while not sm.rx_fifo():
-        pass
-    sm.get(rx_data)
-    print(f"Received data: {rx_data}")
+    for i in range(num_bytes):
+        rx_data[i] = sm.get()
+        print(f"Received payload: {rx_data[i]:#010x}, tx_fifo: {sm.tx_fifo()}")
 
 
 def main() -> None:
