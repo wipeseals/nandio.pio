@@ -114,6 +114,26 @@ class TestUtil:
     def test_PIN_DIR_READ(self):
         assert PIN_DIR_READ == 0b01111111_00000000
 
+    @pytest.mark.parametrize(
+        "src,expect",
+        [
+            (0, 0),
+            (1, 4),
+            (2, 4),
+            (3, 4),
+            (4, 4),
+            (5, 8),
+            (6, 8),
+            (7, 8),
+            (8, 8),
+        ],
+    )
+    def test_roundup4(self, src: int, expect: int):
+        """
+        Test for rounding up to the nearest multiple of 4.
+        """
+        assert Util.roundup4(src) == expect
+
 
 class TestNandAddr:
     @pytest.mark.parametrize(
@@ -327,7 +347,9 @@ class TestPioCmdBuilderSequences:
     )
     def test_seq_read_id(self, cs: int, offset: int, data_count: int):
         pio_prg_arr = array.array("I")
-        PioCmdBuilder.seq_read_id(pio_prg_arr, cs, offset=offset, data_count=data_count)
+        PioCmdBuilder.seq_read_id(
+            pio_prg_arr, cs, offset=offset, data_count=Util.roundup4(data_count)
+        )
         ret: Result = Simulator.execute(
             program_str=self.pio_text,
             test_cycles=100,
@@ -387,7 +409,12 @@ class TestPioCmdBuilderSequences:
     ):
         pio_prg_arr = array.array("I")
         PioCmdBuilder.seq_read(
-            pio_prg_arr, cs, column_addr, page_addr, block_addr, data_count
+            pio_prg_arr,
+            cs,
+            column_addr,
+            page_addr,
+            block_addr,
+            Util.roundup4(data_count),
         )
         ret: Result = Simulator.execute(
             program_str=self.pio_text,
