@@ -38,15 +38,12 @@ class PioNandCommander:
         self,
         nandio: NandIo,
         timeout_ms: int = 1000,
-        # statemachine index
-        sm_index: int = 0,
         # irq index
         irq_index: int = 0,
         # max_freq: 83.3MHz data setup > 12ns
         max_freq: int = 48_000_000,
     ) -> None:
         self._timeout_ms = timeout_ms
-        self._sm_index = sm_index
         self._irq_index = irq_index
         self._max_freq = max_freq
         self._nandio = nandio
@@ -231,7 +228,8 @@ class PioNandCommander:
 
         self._nandio_pio_asm = __nandio_pio_asm_impl
 
-    def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
+    def setup_pio0_nandio(self) -> rp2.StateMachine:
+        """nandio.pioのセットアップ"""
         sm = rp2.StateMachine(0)
         sm.init(
             prog=self._nandio_pio_asm,
@@ -241,20 +239,20 @@ class PioNandCommander:
             sideset_base=self._nandio._cle,
             in_shiftdir=rp2.PIO.SHIFT_LEFT,
             out_shiftdir=rp2.PIO.SHIFT_RIGHT,
-        )
+        )  # type: ignore
+        return sm
+
+    def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
+        sm = self.setup_pio0_nandio()
         sm.irq(lambda sm: print(f"IRQ triggered by SM {sm}"))
         sm.active(1)
 
-        tx_data = array.array("I")
-        PioCmdBuilder.seq_reset(tx_data, cs=chip_index)
-        PioCmdBuilder.seq_read_id(tx_data, cs=chip_index)
-        PioCmdBuilder.set_irq(tx_data)
-        print(f"TX Data: {tx_data}")
-
-        # TODO: DMAに置き換え
-        # TODO: DMA完了後、データの受信まではIRQとDMAの完了で待つ
-        # send data
-        for payload in tx_data:
+        # RESET + READID + IRQ のコマンドシーケンスを送信
+        tx_payload = array.array("I")
+        PioCmdBuilder.seq_reset(tx_payload, cs=chip_index)
+        PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index)
+        PioCmdBuilder.set_irq(tx_payload)
+        for payload in tx_payload:
             print(f"Sending payload: {payload:#010x}, tx_fifo: {sm.tx_fifo()}")
             sm.put(payload)
 
