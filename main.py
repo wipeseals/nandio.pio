@@ -121,6 +121,7 @@ class PioNandCommander:
         )
 
         # PIO assembly code
+        # /nandio.pio からの移植
         @rp2.asm_pio(
             out_init=[rp2.PIO.OUT_HIGH] * len(self._out_pins),
             sideset_init=[rp2.PIO.OUT_HIGH] * len(self._sideset_pins),
@@ -243,15 +244,37 @@ class PioNandCommander:
         return sm
 
     def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
+        # num_bytes: 4byte単位で受信するデータ数
+        num_bytes = Util.roundup4(num_bytes)
+
         sm = self.setup_pio0_nandio()
         sm.irq(lambda sm: print(f"IRQ triggered by SM {sm}"))
         sm.active(1)
+        print(f"PIO SM {sm} is active for chip {chip_index}")
 
         # RESET + READID + IRQ のコマンドシーケンスを送信
         tx_payload = array.array("I")
         PioCmdBuilder.seq_reset(tx_payload, cs=chip_index)
         PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index)
         PioCmdBuilder.set_irq(tx_payload)
+        print(f"TX Payload: {list(tx_payload)}, length: {len(tx_payload)}")
+
+        tx_dma0 = rp2.DMA()
+        # config = tx_dma0.pack_ctrl(
+        #     inc_read=True,
+        #     inc_write=False,  # tx_fifoは場所固定
+        #     size=2,
+        #     bswap=False,
+        # )
+        # tx_dma0.config(
+        #     read=tx_payload,
+        #     write=None,
+        #     count=len(
+        #         tx_payload
+        #     ),  # 4byte単位だが、tx payload は 4byte の array なので修正不要
+        #     ctrl=config,
+        #     trigger=True,
+        # )
         for payload in tx_payload:
             print(f"Sending payload: {payload:#010x}, tx_fifo: {sm.tx_fifo()}")
             sm.put(payload)
@@ -259,11 +282,15 @@ class PioNandCommander:
         # receive data
         rx_data = array.array("I", [0] * num_bytes)
         # wait data
-        for i in range(num_bytes):
+        for i in range(num_bytes // 4):
+            print(
+                f"Waiting for data {i + 1}/{num_bytes}..., tx_fifo: {sm.tx_fifo()}, rx_fifo: {sm.rx_fifo()}"
+            )
             rx_data[i] = sm.get()
             print(f"Received payload: {rx_data[i]:#010x}, rx_fifo: {sm.rx_fifo()}")
 
-        pass
+        tx_dma0.active(False)
+        sm.active(0)
 
     def read_page(
         self,
