@@ -16,15 +16,17 @@
 ;   - data input w/o wp の state1 は init w/o wp と同じ
 ;
 ; Sideset pin configuration for PIO. (w/o WPB)
-; | description             | reb | web | wpb | ale | cle |
-; | ----------------------- | --- | --- | --- | --- | --- |
-; | no setup                | 0   | 0   | 1   | 0   | 0   |
-; | init                    | 1   | 1   | 1   | 0   | 0   |
-; | data output             | 0   | 1   | 1   | 0   | 0   |
-; | cmd  latch state0       | 1   | 0   | 1   | 0   | 1   |
-; | cmd  latch state1       | 1   | 1   | 1   | 0   | 1   |
-; | addr latch state0       | 1   | 0   | 1   | 1   | 0   |
-; | addr latch state1       | 1   | 1   | 1   | 1   | 0   |
+; | description                 | reb | web | wpb | ale | cle |
+; | --------------------------- | --- | --- | --- | --- | --- |
+; | init                        | 1   | 1   | 1   | 0   | 0   |
+; | data output state0          | 0   | 1   | 1   | 0   | 0   |
+; | data output state1 (=init)  | 1   | 1   | 1   | 0   | 0   |
+; | data input state0           | 1   | 0   | 1   | 0   | 0   |
+; | data input state1 (=init)   | 1   | 1   | 1   | 0   | 0   |
+; | cmd  latch state0           | 1   | 0   | 1   | 0   | 1   |
+; | cmd  latch state1           | 1   | 1   | 1   | 0   | 1   |
+; | addr latch state0           | 1   | 0   | 1   | 1   | 0   |
+; | addr latch state1           | 1   | 1   | 1   | 1   | 0   |
 ;
 ; - remarks
 ;   - autopush/autopull は未使用
