@@ -29,7 +29,9 @@
 ; | addr latch state1           | 1   | 1   | 1   | 1   | 0   |
 ;
 ; - remarks
-;   - autopush/autopull は未使用
+;   - autopull は未使用, autopush はしきい値32bitで使用
+;   - data input は1byte(+2bit ceb) ごと転送するが、 data output は4byteごと big endianで転送される
+;     - data input/output で endianの整合を取れるようにする。DMAのBSWAPを使うかPIO(1)を使うかで対応
 ;   - ISRは左シフト、OSRは右シフトで設定（Data Outputで pins -> isr -> rx fifoへの転送をin+pushで行うため、LSBから1byte分を有効データとして受信）
 ;   - TX/RX FIFOは束ねずDepth=4でも動作するが、可能であれば連結した方が良い
 ;   - TX FIFO/RX FIFOはCPUもしくはDMA経由で、DREQを使って転送する想定
@@ -102,6 +104,8 @@ addr_latch_main:
     ; 読み込んだデータの出力はISR->RXFIFOに行うため、RX FIFO Fullになると転送がストールする
     ; sidesetの使い方は、AC Characteristicsを満たすために調整する
     ; csの設定は、bitbangで事前に設定する必要がある
+    ; autopushを用いて1byte転送ごとに1pushするので、4byte単位の転送数を設定する必要がある
+    ;  (設定しなかった場合、最後の非アライン分のデータは転送されるが、LSB詰めされている)
     ;
     ; cmd_1 = { reserved }
 data_output_setup:
@@ -110,8 +114,8 @@ data_output_main:
     nop                          side 0b01100 ;                       /re=0 : read ready
     nop                          side 0b01100 ;                       /re=0 : read ready (t_rp=12ns)
     in pins, 8                   side 0b11100 ; pins -> isr           /re=1 : read data (rbbも入力pinのため、io部分だけ取得)
-    push block                   side 0b11100 ; isr  -> rxfifo      + /re=1 : push data
     jmp x-- data_output_main     side 0b11100 ; loop transfer_count + /re=1
+    push block                   side 0b11100 ; isr  -> rxfifo      + /re=1 : push data (非アライン分の末尾)
     jmp setup                    side 0b11100 ;                       /re=1 : finish
 
     ; =========================================================================

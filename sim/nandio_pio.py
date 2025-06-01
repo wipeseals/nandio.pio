@@ -341,6 +341,9 @@ class PioCmdBuilder:
     @classmethod
     def data_output(cls, arr: array.array, data_count: int) -> None:
         """Output data from NAND Flash."""
+        # data_count を 4byte alignするために切り上げ
+        data_count += 4 - (data_count % 4)
+
         cls.create_cmd_header(
             cmd_id=PioCmdId.DataOutput,
             pindir=PIN_DIR_READ,
