@@ -38,8 +38,17 @@ class PioNandCommander:
         self,
         nandio: NandIo,
         timeout_ms: int = 1000,
+        # statemachine index
+        sm_index: int = 0,
+        # irq index
+        irq_index: int = 0,
+        # max_freq: 83.3MHz data setup > 12ns
+        max_freq: int = 48_000_000,
     ) -> None:
         self._timeout_ms = timeout_ms
+        self._sm_index = sm_index
+        self._irq_index = irq_index
+        self._max_freq = max_freq
         self._nandio = nandio
         # for PIO
         self._out_pins = [
@@ -61,6 +70,8 @@ class PioNandCommander:
             nandio._web,
             nandio._reb,
         ]
+        # rbb pin
+        self._rbb_idx = 15
         # sideset pin index
         self._ss_idx_cle = 0
         self._ss_idx_ale = 1
@@ -118,6 +129,8 @@ class PioNandCommander:
             sideset_init=[rp2.PIO.OUT_HIGH] * len(self._sideset_pins),
             in_shiftdir=rp2.PIO.SHIFT_LEFT,
             out_shiftdir=rp2.PIO.SHIFT_RIGHT,
+            autopush=True,
+            push_thresh=32,
         )
         def __nandio_pio_asm_impl():
             wrap_target()
@@ -181,8 +194,8 @@ class PioNandCommander:
             nop().side(self._ss_state_dout0)  # /RE=L
             nop().side(self._ss_state_dout0)  # /RE=L (t_rp>12ns)
             in_(pins, 8).side(self._ss_state_dout1)  # /RE=H, ceb0/1は無視
-            push(block).side(self._ss_state_dout1)  # /RE=H (t_rh>5ns)
             jmp(x_dec, "data_out_main").side(self._ss_state_dout1)  # /RE=H
+            push(block).side(self._ss_state_dout1)  # 非4byte align分の強制吐き出し
             jmp("setup").side(self._ss_state_dout1)
 
             ########################################################################
@@ -205,7 +218,7 @@ class PioNandCommander:
             jmp(y_dec, "wait_rbb_setup").side(self._ss_state_init)
             label("set_irq_main")
             # cmd_1 = { reserved }
-            irq(0).side(self._ss_state_init)
+            irq(self._irq_index).side(self._ss_state_init)
             # 命令数削減のため、wait_rbbも兼ねる
 
             ########################################################################
@@ -213,7 +226,7 @@ class PioNandCommander:
             label("wait_rbb_setup")
             # 命令数削減のため、以後のcmdidはすべて wait_rbb扱い
             label("wait_rbb_main")
-            wait(1, gpio, 15).side(self._ss_state_init)
+            wait(1, gpio, self._rbb_idx).side(self._ss_state_init)
             wrap()
 
         self._nandio_pio_asm = __nandio_pio_asm_impl
@@ -222,10 +235,10 @@ class PioNandCommander:
         sm = rp2.StateMachine(0)
         sm.init(
             prog=self._nandio_pio_asm,
-            freq=83_333_333,  # 83.333MHz (required: data setup 12ns (= 83.333MHz))
-            in_base=0,
-            out_base=0,
-            sideset_base=10,
+            freq=self._max_freq,
+            in_base=self._nandio._io0,
+            out_base=self._nandio._io0,
+            sideset_base=self._nandio._cle,
             in_shiftdir=rp2.PIO.SHIFT_LEFT,
             out_shiftdir=rp2.PIO.SHIFT_RIGHT,
         )
@@ -250,7 +263,7 @@ class PioNandCommander:
         # wait data
         for i in range(num_bytes):
             rx_data[i] = sm.get()
-            print(f"Received payload: {rx_data[i]:#010x}, tx_fifo: {sm.tx_fifo()}")
+            print(f"Received payload: {rx_data[i]:#010x}, rx_fifo: {sm.rx_fifo()}")
 
         pass
 
