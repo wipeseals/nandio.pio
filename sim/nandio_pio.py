@@ -176,6 +176,11 @@ class Util:
         for i in range(len(data_src)):
             data_src[i] = cls.gen_ceb_bits(cs) | data_src[i]
 
+    @staticmethod
+    def roundup4(value: int) -> int:
+        """4の倍数に切り上げる"""
+        return (value + 3) & ~0x03
+
 
 # RBB以外全部Outputに設定するpindir値
 PIN_DIR_WRITE: int = (
@@ -341,9 +346,6 @@ class PioCmdBuilder:
     @classmethod
     def data_output(cls, arr: array.array, data_count: int) -> None:
         """Output data from NAND Flash."""
-        # data_count を 4byte alignするために切り上げ
-        data_count += 4 - (data_count % 4)
-
         cls.create_cmd_header(
             cmd_id=PioCmdId.DataOutput,
             pindir=PIN_DIR_READ,
