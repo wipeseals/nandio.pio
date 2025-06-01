@@ -15,17 +15,16 @@
 ;   - data output の state1 は init と同じ
 ;   - data input w/o wp の state1 は init w/o wp と同じ
 ;
-;  | description             | reb | web | wpb | ale | cle |
-;  | ----------------------- | --- | --- | --- | --- | --- |
-;  | no setup                | 0   | 0   | 0   | 0   | 0   |
-;  | init                    | 1   | 1   | 0   | 0   | 0   |
-;  | data output             | 0   | 1   | 0   | 0   | 0   |
-;  | cmd  latch state0       | 1   | 0   | 0   | 0   | 1   |
-;  | cmd  latch state1       | 1   | 1   | 0   | 0   | 1   |
-;  | addr latch state0       | 1   | 0   | 0   | 1   | 0   |
-;  | addr latch state1       | 1   | 1   | 0   | 1   | 0   |
-;  | init w/o wp             | 1   | 1   | 1   | 0   | 0   |
-;  | data input w/o wp       | 1   | 0   | 1   | 0   | 0   |
+; Sideset pin configuration for PIO. (w/o WPB)
+; | description             | reb | web | wpb | ale | cle |
+; | ----------------------- | --- | --- | --- | --- | --- |
+; | no setup                | 0   | 0   | 1   | 0   | 0   |
+; | init                    | 1   | 1   | 1   | 0   | 0   |
+; | data output             | 0   | 1   | 1   | 0   | 0   |
+; | cmd  latch state0       | 1   | 0   | 1   | 0   | 1   |
+; | cmd  latch state1       | 1   | 1   | 1   | 0   | 1   |
+; | addr latch state0       | 1   | 0   | 1   | 1   | 0   |
+; | addr latch state1       | 1   | 1   | 1   | 1   | 0   |
 ;
 ; - remarks
 ;   - autopush/autopull は未使用
@@ -133,16 +132,16 @@ data_input_main:
     ;
     ; cmd_1 = { reserved }
 set_irq_setup:
+    jmp y--, wait_rbb_setup      side 0b11100 ; cmd_id==5
 set_irq_main:
     irq 0                        side 0b11100 ; set irq
-    jmp setup                    side 0b11100 ; finish
+    ; 命令数削減のためwait_rbbも兼ねる
 
     ; =========================================================================
     ; cmd_id=6: wait RBB
-    ; rbb pinがHighになるまで待つ。命令数が収まらなかったのでid6以降もまとめている
-    ;
     ; cmd_1 = { reserved }
 wait_rbb_setup:
+    ; rbb pinがHighになるまで待つ。命令数削減のためid>5以後はすべてwait_rbb扱い
 wait_rbb_main:
     wait 1 gpio 15               side 0b11100 ; wait(RBB=1) + init_pin
 
