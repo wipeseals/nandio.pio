@@ -39,7 +39,7 @@ class PioNandCommander:
         self,
         nandio: NandIo,
         timeout_ms: int = 1000,
-        max_freq: int = 75_000_000,
+        max_freq: int = 100_000_000,  # 100MHz
     ) -> None:
         self._timeout_ms = timeout_ms
         self._max_freq = max_freq
@@ -158,9 +158,10 @@ class PioNandCommander:
             jmp(y_dec, "addr_latch_setup").side(self._ss_state_init)
             # 指定したCmdIdをCLE=1, /WE=L->H, /WP=L で出力
             # cmd_1 = { ceb[1:0], nand_cmd_id[7:0] }
+            # t_cls = 12ns / 2cyc = 6ns => 166MHz
             label("cmd_latch_main")
-            out(pins, len(self._out_pins)).side(self._ss_state_cle0)  # CLE=H /WE=L
-            nop().side(self._ss_state_cle0)  #  CLE=H /WE=H (t_cls>12ns)
+            out(pins, len(self._out_pins)).side(self._ss_state_cle0)  # CLE=H /WE=L 1cyc
+            nop().side(self._ss_state_cle0)  #  CLE=H /WE=H 2cyc
             jmp("setup").side(self._ss_state_cle1)  #  CLE=1, /WE=H (t_clh>5ns)
 
             ########################################################################
@@ -170,10 +171,9 @@ class PioNandCommander:
             label("addr_latch_main")
             # cmd_1 = { reserved }
             # data_0, data_1, data_2, ... (transfer_count分だけ) : { ceb[1:0], addr[7:0] }
-            pull(block).side(self._ss_state_ale0)  # ALE=H /WE=L
-            out(pins, len(self._out_pins)).side(
-                self._ss_state_ale0
-            )  # ALE=H /WE=L (t_als>12ns)
+            # t_als = 12ns / 2cyc = 6ns => 166MHz
+            pull(block).side(self._ss_state_ale0)  # ALE=H /WE=L 1cyc
+            out(pins, len(self._out_pins)).side(self._ss_state_ale0)  # ALE=H /WE=L 2cyc
             jmp(x_dec, "addr_latch_main").side(
                 self._ss_state_ale1
             )  # ALE=H /WE=H (t_alh>5ns)
@@ -186,10 +186,11 @@ class PioNandCommander:
             label("data_out_main")
             # cmd_1 = { reserved }
             # transfer_count分だけ /RE をトグルし、データをGPIOから読み取りpush
-            # /RE=L (t_rr + t_rea = 40ns / 3cyc => 13.3ns = 75MHz)
+            # /RE=L (t_rr + t_rea = 40ns / 4cyc => 10ns = 100MHz)
             nop().side(self._ss_state_dout0)  # /RE=L 1cyc
             nop().side(self._ss_state_dout0)  # /RE=L 2cyc
             nop().side(self._ss_state_dout0)  # /RE=L 3cyc
+            nop().side(self._ss_state_dout0)  # /RE=L 4cyc
             in_(pins, 8).side(self._ss_state_dout1)  # /RE=H, ceb0/1は無視
             jmp(x_dec, "data_out_main").side(self._ss_state_dout1)  # /RE=H
             push(block).side(self._ss_state_dout1)  # 非4byte align分の強制吐き出し
@@ -202,10 +203,9 @@ class PioNandCommander:
             label("data_input_main")
             # cmd_1 = { reserved }
             # data_0, data_1, data_2, ... (transfer_count分だけ) : { ceb[1:0], data[7:0] }
-            pull(block).side(self._ss_state_din0)  # /WE=L
-            out(pins, len(self._out_pins)).side(
-                self._ss_state_din0
-            )  # /WE=L (t_wp>12ns)
+            # t_ds = 12ns / 2cyc = 6ns => 166MHz
+            pull(block).side(self._ss_state_din0)  # /WE=L 1cyc
+            out(pins, len(self._out_pins)).side(self._ss_state_din0)  # /WE=L 2cyc
             jmp(x_dec, "data_input_main").side(self._ss_state_din1)
             jmp("setup").side(self._ss_state_init)
 
