@@ -1,3 +1,4 @@
+import uctypes
 import array
 import rp2
 
@@ -229,6 +230,30 @@ class PioNandCommander:
 
         self._nandio_pio_asm = __nandio_pio_asm_impl
 
+        # DREQ Assign
+        # | PIO | SM | PORT | DREQ# | Description           |
+        # |-----|----| -----|-------|-----------------------|
+        # | 0   | 0  | TX   | 0     | PIO0 SM0 TX DREQ      |
+        # | 0   | 1  | TX   | 1     | PIO0 SM0 TX DREQ      |
+        # | 0   | 2  | TX   | 2     | PIO0 SM0 TX DREQ      |
+        # | 0   | 3  | TX   | 3     | PIO0 SM0 TX DREQ      |
+        # | 0   | 0  | RX   | 4     | PIO0 SM0 RX DREQ      |
+        # | 0   | 1  | RX   | 5     | PIO0 SM1 RX DREQ      |
+        # | 0   | 2  | RX   | 6     | PIO0 SM2 RX DREQ      |
+        # | 0   | 3  | RX   | 7     | PIO0 SM3 RX DREQ      |
+        # | 1   | 0  | TX   | 8     | PIO1 SM0 TX DREQ      |
+        # | 1   | 1  | TX   | 9     | PIO1 SM1 TX DREQ      |
+        # | 1   | 2  | TX   | 10    | PIO1 SM2 TX DREQ      |
+        # | 1   | 3  | TX   | 11    | PIO1 SM3 TX DREQ      |
+        # | 1   | 0  | RX   | 12    | PIO1 SM0 RX DREQ      |
+        # | 1   | 1  | RX   | 13    | PIO1 SM1 RX DREQ      |
+        # | 1   | 2  | RX   | 14    | PIO1 SM2 RX DREQ      |
+        # | 1   | 3  | RX   | 15    | PIO1 SM3 RX DREQ      |
+        self._pio0_sm0_tx_dreq = 0
+        self._pio0_sm0_rx_dreq = 4
+        self._pio1_sm0_tx_dreq = 8
+        self._pio1_sm0_rx_dreq = 12
+
     def setup_pio0_nandio(self) -> rp2.StateMachine:
         """nandio.pioのセットアップ"""
         sm = rp2.StateMachine(0)
@@ -247,10 +272,10 @@ class PioNandCommander:
         # num_bytes: 4byte単位で受信するデータ数
         num_bytes = Util.roundup4(num_bytes)
 
-        sm = self.setup_pio0_nandio()
-        sm.irq(lambda sm: print(f"IRQ triggered by SM {sm}"))
-        sm.active(1)
-        print(f"PIO SM {sm} is active for chip {chip_index}")
+        sm0 = self.setup_pio0_nandio()
+        sm0.irq(lambda sm: print(f"IRQ triggered by SM {sm}"))
+        sm0.active(1)
+        print(f"PIO SM {sm0} is active for chip {chip_index}")
 
         # RESET + READID + IRQ のコマンドシーケンスを送信
         tx_payload = array.array("I")
@@ -260,37 +285,32 @@ class PioNandCommander:
         print(f"TX Payload: {list(tx_payload)}, length: {len(tx_payload)}")
 
         tx_dma0 = rp2.DMA()
-        # config = tx_dma0.pack_ctrl(
-        #     inc_read=True,
-        #     inc_write=False,  # tx_fifoは場所固定
-        #     size=2,
-        #     bswap=False,
-        # )
-        # tx_dma0.config(
-        #     read=tx_payload,
-        #     write=None,
-        #     count=len(
-        #         tx_payload
-        #     ),  # 4byte単位だが、tx payload は 4byte の array なので修正不要
-        #     ctrl=config,
-        #     trigger=True,
-        # )
-        for payload in tx_payload:
-            print(f"Sending payload: {payload:#010x}, tx_fifo: {sm.tx_fifo()}")
-            sm.put(payload)
+        tx_dma0_ctrl = tx_dma0.pack_ctrl(
+            size=2,  # 4byte転送
+            inc_read=True,
+            inc_write=False,  # tx_fifoは場所固定
+            treq_sel=self._pio0_sm0_tx_dreq,  # PIO0 SM0 TX DREQ
+        )
+        tx_dma0.config(
+            read=tx_payload,
+            write=sm0,
+            count=len(tx_payload),
+            ctrl=tx_dma0_ctrl,
+            trigger=True,
+        )
+        # for payload in tx_payload:
+        #     print(f"Sending payload: {payload:#010x}, tx_fifo: {sm.tx_fifo()}")
+        #     sm.put(payload)
 
         # receive data
         rx_data = array.array("I", [0] * num_bytes)
         # wait data
         for i in range(num_bytes // 4):
-            print(
-                f"Waiting for data {i + 1}/{num_bytes}..., tx_fifo: {sm.tx_fifo()}, rx_fifo: {sm.rx_fifo()}"
-            )
-            rx_data[i] = sm.get()
-            print(f"Received payload: {rx_data[i]:#010x}, rx_fifo: {sm.rx_fifo()}")
+            rx_data[i] = sm0.get()
+            print(f"Received payload: {rx_data[i]:#010x}, rx_fifo: {sm0.rx_fifo()}")
 
         tx_dma0.active(False)
-        sm.active(0)
+        sm0.active(0)
 
     def read_page(
         self,
