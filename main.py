@@ -1,4 +1,4 @@
-import uctypes
+from micropython import const
 import array
 import rp2
 
@@ -69,13 +69,13 @@ class PioNandCommander:
             nandio._reb,
         ]
         # rbb pin
-        self._rbb_idx = 15
+        self._rbb_idx = const(15)
         # sideset pin index
-        self._ss_idx_cle = 0
-        self._ss_idx_ale = 1
-        self._ss_idx_wpb = 2
-        self._ss_idx_web = 3
-        self._ss_idx_reb = 4
+        self._ss_idx_cle = const(0)
+        self._ss_idx_ale = const(1)
+        self._ss_idx_wpb = const(2)
+        self._ss_idx_web = const(3)
+        self._ss_idx_reb = const(4)
         # sideset pin states
         self._ss_state_init = (
             Util.bit_on(self._ss_idx_reb)
@@ -249,10 +249,10 @@ class PioNandCommander:
         # | 1   | 1  | RX   | 13    | PIO1 SM1 RX DREQ      |
         # | 1   | 2  | RX   | 14    | PIO1 SM2 RX DREQ      |
         # | 1   | 3  | RX   | 15    | PIO1 SM3 RX DREQ      |
-        self._pio0_sm0_tx_dreq = 0
-        self._pio0_sm0_rx_dreq = 4
-        self._pio1_sm0_tx_dreq = 8
-        self._pio1_sm0_rx_dreq = 12
+        self._pio0_sm0_tx_dreq = const(0)
+        self._pio0_sm0_rx_dreq = const(4)
+        self._pio1_sm0_tx_dreq = const(8)
+        self._pio1_sm0_rx_dreq = const(12)
 
     def setup_pio0_nandio(self) -> rp2.StateMachine:
         """nandio.pioのセットアップ"""
@@ -269,26 +269,33 @@ class PioNandCommander:
         return sm
 
     def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
-        # num_bytes: 4byte単位で受信するデータ数
-        num_bytes = Util.roundup4(num_bytes)
+        # 4byte単位で受信するデータ数
+        read_bytes = Util.roundup4(num_bytes)
 
+        ###########################################################
+        # Setup PIO State Machine
         sm0 = self.setup_pio0_nandio()
         sm0.irq(lambda sm: print(f"IRQ triggered by SM {sm}"))
         sm0.active(1)
-        print(f"PIO SM {sm0} is active for chip {chip_index}")
+        print(
+            f"PIO SM {sm0} is active for chip {chip_index} num_bytes: {num_bytes} read_bytes: {read_bytes}"
+        )
 
         # RESET + READID + IRQ のコマンドシーケンスを送信
         tx_payload = array.array("I")
         PioCmdBuilder.seq_reset(tx_payload, cs=chip_index)
-        PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index)
+        PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index, data_count=read_bytes)
         PioCmdBuilder.set_irq(tx_payload)
         print(f"TX Payload: {list(tx_payload)}, length: {len(tx_payload)}")
 
+        ###########################################################
+        # Setup TX DMA
         tx_dma0 = rp2.DMA()
         tx_dma0_ctrl = tx_dma0.pack_ctrl(
             size=2,  # 4byte転送
             inc_read=True,
             inc_write=False,  # tx_fifoは場所固定
+            bswap=False,
             treq_sel=self._pio0_sm0_tx_dreq,  # PIO0 SM0 TX DREQ
         )
         tx_dma0.config(
@@ -298,19 +305,38 @@ class PioNandCommander:
             ctrl=tx_dma0_ctrl,
             trigger=True,
         )
-        # for payload in tx_payload:
-        #     print(f"Sending payload: {payload:#010x}, tx_fifo: {sm.tx_fifo()}")
-        #     sm.put(payload)
+        #############################################################
+        # Setup RX DMA
+        rx_data = array.array("B", [0] * read_bytes)
 
-        # receive data
-        rx_data = array.array("I", [0] * num_bytes)
-        # wait data
-        for i in range(num_bytes // 4):
-            rx_data[i] = sm0.get()
-            print(f"Received payload: {rx_data[i]:#010x}, rx_fifo: {sm0.rx_fifo()}")
+        rx_dma0 = rp2.DMA()
+        rx_dma0_ctrl = rx_dma0.pack_ctrl(
+            size=2,  # 4byte転送
+            inc_read=False,  # rx_fifoは場所固定
+            inc_write=True,
+            bswap=True,  # 受信データはBig Endianなので、バイトオーダーを反転
+            treq_sel=self._pio0_sm0_rx_dreq,  # PIO0 SM0 RX DREQ
+        )
+        rx_dma0.config(
+            read=sm0,
+            write=rx_data,
+            count=read_bytes // 4,  # 4byte単位で設定
+            ctrl=rx_dma0_ctrl,
+            trigger=True,
+        )
 
-        tx_dma0.active(False)
+        #############################################################
+        # wait for finished
+        while rx_dma0.active():
+            print(
+                f"waiting. tx_dma0.active(): {tx_dma0.active()}, tx_fifo: {sm0.tx_fifo()}, rx_fifo: {sm0.rx_fifo()}, rx_dma0.active(): {rx_dma0.active()}"
+            )
         sm0.active(0)
+        tx_dma0.close()
+        rx_dma0.close()
+
+        for i in range(len(rx_data)):
+            print(f"RX Data[{i}]: {rx_data[i]:#02x}")
 
     def read_page(
         self,
