@@ -39,13 +39,9 @@ class PioNandCommander:
         self,
         nandio: NandIo,
         timeout_ms: int = 1000,
-        # irq index
-        irq_index: int = 0,
-        # max_freq: 83.3MHz data setup > 12ns
-        max_freq: int = 48_000_000,
+        max_freq: int = 75_000_000,
     ) -> None:
         self._timeout_ms = timeout_ms
-        self._irq_index = irq_index
         self._max_freq = max_freq
         self._nandio = nandio
         # for PIO
@@ -190,8 +186,10 @@ class PioNandCommander:
             label("data_out_main")
             # cmd_1 = { reserved }
             # transfer_count分だけ /RE をトグルし、データをGPIOから読み取りpush
-            nop().side(self._ss_state_dout0)  # /RE=L
-            nop().side(self._ss_state_dout0)  # /RE=L (t_rp>12ns)
+            # /RE=L (t_rr + t_rea = 40ns / 3cyc => 13.3ns = 75MHz)
+            nop().side(self._ss_state_dout0)  # /RE=L 1cyc
+            nop().side(self._ss_state_dout0)  # /RE=L 2cyc
+            nop().side(self._ss_state_dout0)  # /RE=L 3cyc
             in_(pins, 8).side(self._ss_state_dout1)  # /RE=H, ceb0/1は無視
             jmp(x_dec, "data_out_main").side(self._ss_state_dout1)  # /RE=H
             push(block).side(self._ss_state_dout1)  # 非4byte align分の強制吐き出し
@@ -200,7 +198,7 @@ class PioNandCommander:
             ########################################################################
             # data input command
             label("data_input_setup")
-            jmp(y_dec, "set_irq_setup").side(self._ss_state_init)
+            jmp(y_dec, "wait_rbb_setup").side(self._ss_state_init)
             label("data_input_main")
             # cmd_1 = { reserved }
             # data_0, data_1, data_2, ... (transfer_count分だけ) : { ceb[1:0], data[7:0] }
@@ -210,15 +208,6 @@ class PioNandCommander:
             )  # /WE=L (t_wp>12ns)
             jmp(x_dec, "data_input_main").side(self._ss_state_din1)
             jmp("setup").side(self._ss_state_init)
-
-            ########################################################################
-            # set irq command
-            label("set_irq_setup")
-            jmp(y_dec, "wait_rbb_setup").side(self._ss_state_init)
-            label("set_irq_main")
-            # cmd_1 = { reserved }
-            irq(self._irq_index).side(self._ss_state_init)
-            # 命令数削減のため、wait_rbbも兼ねる
 
             ########################################################################
             # wait_rbb_setup
@@ -231,24 +220,13 @@ class PioNandCommander:
         self._nandio_pio_asm = __nandio_pio_asm_impl
 
         # DREQ Assign
+        # DREQ# = PIO# * 4 + (4 if RX else 0) + SM#
         # | PIO | SM | PORT | DREQ# | Description           |
         # |-----|----| -----|-------|-----------------------|
         # | 0   | 0  | TX   | 0     | PIO0 SM0 TX DREQ      |
-        # | 0   | 1  | TX   | 1     | PIO0 SM0 TX DREQ      |
-        # | 0   | 2  | TX   | 2     | PIO0 SM0 TX DREQ      |
-        # | 0   | 3  | TX   | 3     | PIO0 SM0 TX DREQ      |
         # | 0   | 0  | RX   | 4     | PIO0 SM0 RX DREQ      |
-        # | 0   | 1  | RX   | 5     | PIO0 SM1 RX DREQ      |
-        # | 0   | 2  | RX   | 6     | PIO0 SM2 RX DREQ      |
-        # | 0   | 3  | RX   | 7     | PIO0 SM3 RX DREQ      |
         # | 1   | 0  | TX   | 8     | PIO1 SM0 TX DREQ      |
-        # | 1   | 1  | TX   | 9     | PIO1 SM1 TX DREQ      |
-        # | 1   | 2  | TX   | 10    | PIO1 SM2 TX DREQ      |
-        # | 1   | 3  | TX   | 11    | PIO1 SM3 TX DREQ      |
         # | 1   | 0  | RX   | 12    | PIO1 SM0 RX DREQ      |
-        # | 1   | 1  | RX   | 13    | PIO1 SM1 RX DREQ      |
-        # | 1   | 2  | RX   | 14    | PIO1 SM2 RX DREQ      |
-        # | 1   | 3  | RX   | 15    | PIO1 SM3 RX DREQ      |
         self._pio0_sm0_tx_dreq = const(0)
         self._pio0_sm0_rx_dreq = const(4)
         self._pio1_sm0_tx_dreq = const(8)
@@ -274,19 +252,13 @@ class PioNandCommander:
 
         ###########################################################
         # Setup PIO State Machine
-        sm0 = self.setup_pio0_nandio()
-        sm0.irq(lambda sm: print(f"IRQ triggered by SM {sm}"))
-        sm0.active(1)
-        print(
-            f"PIO SM {sm0} is active for chip {chip_index} num_bytes: {num_bytes} read_bytes: {read_bytes}"
-        )
-
         # RESET + READID + IRQ のコマンドシーケンスを送信
+        sm0 = self.setup_pio0_nandio()
+        sm0.active(1)
+
         tx_payload = array.array("I")
         PioCmdBuilder.seq_reset(tx_payload, cs=chip_index)
         PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index, data_count=read_bytes)
-        PioCmdBuilder.set_irq(tx_payload)
-        print(f"TX Payload: {list(tx_payload)}, length: {len(tx_payload)}")
 
         ###########################################################
         # Setup TX DMA

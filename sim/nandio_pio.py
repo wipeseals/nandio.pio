@@ -256,8 +256,7 @@ class PioCmdId:
     AddrLatch = 0x02
     DataOutput = 0x03
     DataInput = 0x04
-    SetIrq = 0x05
-    WaitRbb = 0x06
+    WaitRbb = 0x05
 
 
 class PioCmdBuilder:
@@ -376,17 +375,6 @@ class PioCmdBuilder:
         Util.apply_cs_to_data_array(data, cs)  # Ensure data is modified with CS
         cls.data_input_only_header(arr, len(data))
         arr.extend(data)
-
-    @classmethod
-    def set_irq(cls, arr: array.array) -> None:
-        """Set IRQ."""
-        cls.create_cmd_header(
-            cmd_id=PioCmdId.SetIrq,
-            pindir=PIN_DIR_WRITE,
-            transfer_count=1,
-            cmd1=None,
-            arr=arr,
-        )
 
     @classmethod
     def wait_rbb(cls, arr: array.array) -> None:

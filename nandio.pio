@@ -111,8 +111,8 @@ addr_latch_main:
 data_output_setup:
     jmp y--, data_input_setup        side 0b11100 ; cmd_id==3
 data_output_main:
-    nop                          side 0b01100 ;                       /re=0 : read ready
-    nop                          side 0b01100 ;                       /re=0 : read ready (t_rp=12ns)
+    nop                          side 0b01100 ;                       /re=0 : read ready (t_rr=20ns)
+    nop                          side 0b01100 ;                       /re=0 : read ready (t_rea=20ns)
     in pins, 8                   side 0b11100 ; pins -> isr           /re=1 : read data (rbbも入力pinのため、io部分だけ取得)
     jmp x-- data_output_main     side 0b11100 ; loop transfer_count + /re=1
     push block                   side 0b11100 ; isr  -> rxfifo      + /re=1 : push data (非アライン分の末尾)
