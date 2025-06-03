@@ -21,27 +21,20 @@
 ; | init                        | 1   | 1   | 1   | 0   | 0   |
 ; | data output state0          | 0   | 1   | 1   | 0   | 0   |
 ; | data output state1 (=init)  | 1   | 1   | 1   | 0   | 0   |
-; | data input state0           | 1   | 0   | 1   | 0   | 0   |
-; | data input state1 (=init)   | 1   | 1   | 1   | 0   | 0   |
-; | cmd  latch state0           | 1   | 0   | 1   | 0   | 1   |
-; | cmd  latch state1           | 1   | 1   | 1   | 0   | 1   |
-; | addr latch state0           | 1   | 0   | 1   | 1   | 0   |
-; | addr latch state1           | 1   | 1   | 1   | 1   | 0   |
+; | data input  state0          | 1   | 0   | 1   | 0   | 0   |
+; | data input  state1 (=init)  | 1   | 1   | 1   | 0   | 0   |
+; | cmd  latch  state0          | 1   | 0   | 1   | 0   | 1   |
+; | cmd  latch  state1          | 1   | 1   | 1   | 0   | 1   |
+; | addr latch  state0          | 1   | 0   | 1   | 1   | 0   |
+; | addr latch  state1          | 1   | 1   | 1   | 1   | 0   |
 ;
 ; - remarks
 ;   - autopull は未使用, autopush はしきい値32bitで使用
 ;   - data input は1byte(+2bit ceb) ごと転送するが、 data output は4byteごと big endianで転送される
-;     - data input/output で endianの整合を取れるようにする。DMAのBSWAPを使うかPIO(1)を使うかで対応
 ;   - ISRは左シフト、OSRは右シフトで設定（Data Outputで pins -> isr -> rx fifoへの転送をin+pushで行うため、LSBから1byte分を有効データとして受信）
 ;   - TX/RX FIFOは束ねずDepth=4でも動作するが、可能であれば連結した方が良い
 ;   - TX FIFO/RX FIFOはCPUもしくはDMA経由で、DREQを使って転送する想定
-;   - sideset と out/set が重複した場合、sidesetが優先される
-;   - basepinは表のとおりに設定する必要がある
-;   - pioの動作周波数は文書無しで1cycだと125MHz想定で8ns
-;     - /WPは起動時にHigh固定にして無効化している。/WP=Hに変えたとき、/WE=Lにするまでの時間(t_ww)=100nsかかるため
-;     - Dryrun用途であればpio/sm起動時にマッピングしないかInput PullDownあたりに固定が良い
 ;   - 命令数やビット数の都合でceb1, ceb0とioの個別制御ができていない。AddrLatch, CmdLatch, DataInputにおいてはceb1, ceb0を一緒に転送する必要がある
-;     - DataOutputはCSを事前設定するだけで良い。残りの/REはsidesetで制御する
 
 .wrap_target
 .side_set 5
@@ -79,8 +72,8 @@ cmd_latch_setup:
     jmp y--, addr_latch_setup    side 0b11100 ; cmd_id==1
 cmd_latch_main:
     out pins, 10                 side 0b10101 ; osr -> pins,  cle=1, /we=0 : cs, nand_cmd_id
-    nop                          side 0b10101 ;               cle=1, /we=0 : read ready  (t_cls=12ns)
-    jmp setup                    side 0b11101 ;               cle=1, /we=1 : posedge /we (t_clh=5ns)
+    nop                          side 0b10101 ;               cle=1, /we=0 : read ready
+    jmp setup                    side 0b11101 ;               cle=1, /we=1 : posedge /we
 
     ; =========================================================================
     ; cmd_id=2: nand addr latch
@@ -111,8 +104,10 @@ addr_latch_main:
 data_output_setup:
     jmp y--, data_input_setup        side 0b11100 ; cmd_id==3
 data_output_main:
-    nop                          side 0b01100 ;                       /re=0 : read ready (t_rr=20ns)
-    nop                          side 0b01100 ;                       /re=0 : read ready (t_rea=20ns)
+    nop                          side 0b01100 ;                       /re=0 : 1st cyc (t_rr + t_rea = 40ns / 4cyc => 10ns = 100MHz)
+    nop                          side 0b01100 ;                       /re=0 : 2nd cyc
+    nop                          side 0b01100 ;                       /re=0 : 3rd cyc
+    nop                          side 0b01100 ;                       /re=0 : 4th cyc
     in pins, 8                   side 0b11100 ; pins -> isr           /re=1 : read data (rbbも入力pinのため、io部分だけ取得)
     jmp x-- data_output_main     side 0b11100 ; loop transfer_count + /re=1
     push block                   side 0b11100 ; isr  -> rxfifo      + /re=1 : push data (非アライン分の末尾)
@@ -133,18 +128,7 @@ data_input_main:
     jmp setup                    side 0b11100 ;                       /we=1 + /wp=1 : finish
 
     ; =========================================================================
-    ; cmd_id=5: IRQ
-    ; IRQを発行する。完了検知用
-    ;
-    ; cmd_1 = { reserved }
-set_irq_setup:
-    jmp y--, wait_rbb_setup      side 0b11100 ; cmd_id==5
-set_irq_main:
-    irq 0                        side 0b11100 ; set irq
-    ; 命令数削減のためwait_rbbも兼ねる
-
-    ; =========================================================================
-    ; cmd_id=6: wait RBB
+    ; cmd_id=5: wait RBB
     ; cmd_1 = { reserved }
 wait_rbb_setup:
     ; rbb pinがHighになるまで待つ。命令数削減のためid>5以後はすべてwait_rbb扱い

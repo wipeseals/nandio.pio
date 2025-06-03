@@ -295,13 +295,6 @@ class TestPioCmdBuilderBasics:
             # CS が追加されたデータを転送するはず
             assert pio_prg_arr[i + 2] == Util.apply_cs(data, cs)
 
-    def test_set_irq(self):
-        pio_prg_arr = array.array("I")
-        PioCmdBuilder.set_irq(pio_prg_arr)
-
-        assert pio_prg_arr[0x0] == self.cmd0(PioCmdId.SetIrq, PIN_DIR_WRITE, 1)
-        assert pio_prg_arr[0x1] == 0x00
-
     def test_wait_rbb(self):
         pio_prg_arr = array.array("I")
         PioCmdBuilder.wait_rbb(pio_prg_arr)
