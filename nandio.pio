@@ -15,30 +15,26 @@
 ;   - data output の state1 は init と同じ
 ;   - data input w/o wp の state1 は init w/o wp と同じ
 ;
-;  | description             | reb | web | wpb | ale | cle |
-;  | ----------------------- | --- | --- | --- | --- | --- |
-;  | no setup                | 0   | 0   | 0   | 0   | 0   |
-;  | init                    | 1   | 1   | 0   | 0   | 0   |
-;  | data output             | 0   | 1   | 0   | 0   | 0   |
-;  | cmd  latch state0       | 1   | 0   | 0   | 0   | 1   |
-;  | cmd  latch state1       | 1   | 1   | 0   | 0   | 1   |
-;  | addr latch state0       | 1   | 0   | 0   | 1   | 0   |
-;  | addr latch state1       | 1   | 1   | 0   | 1   | 0   |
-;  | init w/o wp             | 1   | 1   | 1   | 0   | 0   |
-;  | data input w/o wp       | 1   | 0   | 1   | 0   | 0   |
+; Sideset pin configuration for PIO. (w/o WPB)
+; | description                 | reb | web | wpb | ale | cle |
+; | --------------------------- | --- | --- | --- | --- | --- |
+; | init                        | 1   | 1   | 1   | 0   | 0   |
+; | data output state0          | 0   | 1   | 1   | 0   | 0   |
+; | data output state1 (=init)  | 1   | 1   | 1   | 0   | 0   |
+; | data input  state0          | 1   | 0   | 1   | 0   | 0   |
+; | data input  state1 (=init)  | 1   | 1   | 1   | 0   | 0   |
+; | cmd  latch  state0          | 1   | 0   | 1   | 0   | 1   |
+; | cmd  latch  state1          | 1   | 1   | 1   | 0   | 1   |
+; | addr latch  state0          | 1   | 0   | 1   | 1   | 0   |
+; | addr latch  state1          | 1   | 1   | 1   | 1   | 0   |
 ;
 ; - remarks
-;   - autopush/autopull は未使用
+;   - autopull は未使用, autopush はしきい値32bitで使用
+;   - data input は1byte(+2bit ceb) ごと転送するが、 data output は4byteごと big endianで転送される
 ;   - ISRは左シフト、OSRは右シフトで設定（Data Outputで pins -> isr -> rx fifoへの転送をin+pushで行うため、LSBから1byte分を有効データとして受信）
 ;   - TX/RX FIFOは束ねずDepth=4でも動作するが、可能であれば連結した方が良い
 ;   - TX FIFO/RX FIFOはCPUもしくはDMA経由で、DREQを使って転送する想定
-;   - sideset と out/set が重複した場合、sidesetが優先される
-;   - basepinは表のとおりに設定する必要がある
-;   - pioの動作周波数は文書無しで1cycだと125MHz想定で8ns
-;     - /WPは起動時にHigh固定にして無効化している。/WP=Hに変えたとき、/WE=Lにするまでの時間(t_ww)=100nsかかるため
-;     - Dryrun用途であればpio/sm起動時にマッピングしないかInput PullDownあたりに固定が良い
 ;   - 命令数やビット数の都合でceb1, ceb0とioの個別制御ができていない。AddrLatch, CmdLatch, DataInputにおいてはceb1, ceb0を一緒に転送する必要がある
-;     - DataOutputはCSを事前設定するだけで良い。残りの/REはsidesetで制御する
 
 .wrap_target
 .side_set 5
@@ -76,8 +72,8 @@ cmd_latch_setup:
     jmp y--, addr_latch_setup    side 0b11100 ; cmd_id==1
 cmd_latch_main:
     out pins, 10                 side 0b10101 ; osr -> pins,  cle=1, /we=0 : cs, nand_cmd_id
-    nop                          side 0b10101 ;               cle=1, /we=0 : read ready  (t_cls=12ns)
-    jmp setup                    side 0b11101 ;               cle=1, /we=1 : posedge /we (t_clh=5ns)
+    nop                          side 0b10101 ;               cle=1, /we=0 : read ready
+    jmp setup                    side 0b11101 ;               cle=1, /we=1 : posedge /we
 
     ; =========================================================================
     ; cmd_id=2: nand addr latch
@@ -101,15 +97,19 @@ addr_latch_main:
     ; 読み込んだデータの出力はISR->RXFIFOに行うため、RX FIFO Fullになると転送がストールする
     ; sidesetの使い方は、AC Characteristicsを満たすために調整する
     ; csの設定は、bitbangで事前に設定する必要がある
+    ; autopushを用いて1byte転送ごとに1pushするので、4byte単位の転送数を設定する必要がある
+    ;  (設定しなかった場合、最後の非アライン分のデータは転送されるが、LSB詰めされている)
     ;
     ; cmd_1 = { reserved }
 data_output_setup:
     jmp y--, data_input_setup        side 0b11100 ; cmd_id==3
 data_output_main:
-    nop                          side 0b01100 ;                       /re=0 : read ready
-    nop                          side 0b01100 ;                       /re=0 : read ready (t_rp=12ns)
+    nop                          side 0b01100 ;                       /re=0 : 1st cyc (t_rr + t_rea = 40ns / 5cyc => 8ns = 125MHz)
+    nop                          side 0b01100 ;                       /re=0 : 2nd cyc
+    nop                          side 0b01100 ;                       /re=0 : 3rd cyc
+    nop                          side 0b01100 ;                       /re=0 : 4th cyc
+    nop                          side 0b01100 ;                       /re=0 : 5th cyc
     in pins, 8                   side 0b11100 ; pins -> isr           /re=1 : read data (rbbも入力pinのため、io部分だけ取得)
-    push block                   side 0b11100 ; isr  -> rxfifo      + /re=1 : push data
     jmp x-- data_output_main     side 0b11100 ; loop transfer_count + /re=1
     jmp setup                    side 0b11100 ;                       /re=1 : finish
 
@@ -128,21 +128,10 @@ data_input_main:
     jmp setup                    side 0b11100 ;                       /we=1 + /wp=1 : finish
 
     ; =========================================================================
-    ; cmd_id=5: IRQ
-    ; IRQを発行する。完了検知用
-    ;
-    ; cmd_1 = { reserved }
-set_irq_setup:
-set_irq_main:
-    irq 0                        side 0b11100 ; set irq
-    jmp setup                    side 0b11100 ; finish
-
-    ; =========================================================================
-    ; cmd_id=6: wait RBB
-    ; rbb pinがHighになるまで待つ。命令数が収まらなかったのでid6以降もまとめている
-    ;
+    ; cmd_id=5: wait RBB
     ; cmd_1 = { reserved }
 wait_rbb_setup:
+    ; rbb pinがHighになるまで待つ。命令数削減のためid>5以後はすべてwait_rbb扱い
 wait_rbb_main:
     wait 1 gpio 15               side 0b11100 ; wait(RBB=1) + init_pin
 

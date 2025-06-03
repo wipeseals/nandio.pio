@@ -62,6 +62,7 @@ PIO_OPCODES: array.array = array('H', [40096, 31888, 31788, 31812, 40096, 7304, 
 
 - Download the MicroPython UF2 file for RP2040 from the official Raspberry Pi Pico website and flash it to the board.
   - See [MicroPython - Raspberry Pi](https://www.raspberrypi.com/documentation/microcontrollers/micropython.html) for details.
+  - The confirmed working version of MicroPython is `v1.24.1` (other versions may not work properly).
 
 #### Run MicroPython scripts
 

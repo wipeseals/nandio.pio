@@ -1,9 +1,18 @@
 import array
 import time
 
-from sim.nandio_pio import NandConfig, NandAddr, NandCommandId, NandStatus, PinAssign
+from sim.nandio_pio import (
+    NandConfig,
+    NandAddr,
+    NandCommandId,
+    NandStatus,
+    PinAssign,
+    PioCmdBuilder,
+)
+import nandio as nandio_pio
 
 from machine import Pin
+import rp2
 
 
 class NandIo:
@@ -169,7 +178,7 @@ class NandIo:
         return True
 
 
-class NandCommander:
+class FwNandCommander:
     def __init__(
         self,
         nandio: NandIo,

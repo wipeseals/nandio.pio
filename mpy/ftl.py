@@ -1,12 +1,12 @@
 import json
-from mpy.driver import NandIo, NandCommander
+from mpy.driver import NandIo, FwNandCommander
 from sim.nandio_pio import BLOCK, CHIP, LBA, PAGE, PBA, NandConfig
 
 
 class NandBlockManager:
     def __init__(
         self,
-        nandcmd: NandCommander | NandCommander,
+        nandcmd: FwNandCommander,  # | PioNandCommander,
         # initialized values
         is_initial: bool = False,
         num_chip: CHIP = 0,
@@ -269,7 +269,7 @@ class FlashTranslationLayer:
         # NAND IO Drivers
         self.nandio = NandIo(keep_wp=False)
         # NAND Commander
-        self.nandcmd = NandCommander(nandio=self.nandio)
+        self.nandcmd = FwNandCommander(nandio=self.nandio)
         # NAND Block Manager
         self.blockmng = NandBlockManager(nandcmd=self.nandcmd)
         # NAND Page Codec

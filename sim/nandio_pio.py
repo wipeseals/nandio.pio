@@ -176,6 +176,11 @@ class Util:
         for i in range(len(data_src)):
             data_src[i] = cls.gen_ceb_bits(cs) | data_src[i]
 
+    @staticmethod
+    def roundup4(value: int) -> int:
+        """4の倍数に切り上げる"""
+        return (value + 3) & ~0x03
+
 
 # RBB以外全部Outputに設定するpindir値
 PIN_DIR_WRITE: int = (
@@ -231,17 +236,16 @@ class NandAddr:
         """
         ca = column_addr & 0xFFF
         pa = (page_addr & 0x3F) | ((block_addr & 0x3FF) << 6)
-        arr[0] = ca & 0xFF
-        arr[1] = (ca >> 8) & 0x0F
-        arr[2] = pa & 0xFF
-        arr[3] = (pa >> 8) & 0xFF
+        arr.append(ca & 0xFF)
+        arr.append((ca >> 8) & 0x0F)
+        arr.append(pa & 0xFF)
+        arr.append((pa >> 8) & 0xFF)
 
     @staticmethod
     def create_block_addr(arr: array.array, block_addr: BLOCK) -> None:
         """Block Addressを2byteのAddressInput用に変換する。Auto Block Erase用。"""
-
-        arr[0] = block_addr & 0xFF
-        arr[1] = (block_addr >> 8) & 0xFF
+        arr.append(block_addr & 0xFF)
+        arr.append((block_addr >> 8) & 0xFF)
 
 
 class PioCmdId:
@@ -252,8 +256,7 @@ class PioCmdId:
     AddrLatch = 0x02
     DataOutput = 0x03
     DataInput = 0x04
-    SetIrq = 0x05
-    WaitRbb = 0x06
+    WaitRbb = 0x05
 
 
 class PioCmdBuilder:
@@ -374,17 +377,6 @@ class PioCmdBuilder:
         arr.extend(data)
 
     @classmethod
-    def set_irq(cls, arr: array.array) -> None:
-        """Set IRQ."""
-        cls.create_cmd_header(
-            cmd_id=PioCmdId.SetIrq,
-            pindir=PIN_DIR_WRITE,
-            transfer_count=1,
-            cmd1=None,
-            arr=arr,
-        )
-
-    @classmethod
     def wait_rbb(cls, arr: array.array) -> None:
         """Wait for RBB pin to be low."""
         cls.create_cmd_header(
@@ -405,7 +397,7 @@ class PioCmdBuilder:
         cs: int | None = None,
     ) -> None:
         """Latch full address to NAND Flash."""
-        addrs = array.array("I", [0, 0, 0, 0])  # 4-byte address
+        addrs = array.array("I")
         NandAddr.create_full_addr(addrs, column_addr, page_addr, block_addr)
         cls.addr_latch(arr, addrs, cs)
 
@@ -417,7 +409,7 @@ class PioCmdBuilder:
         cs: int | None = None,
     ) -> None:
         """Latch block address to NAND Flash."""
-        addrs = array.array("I", [0, 0])  # 2-byte address
+        addrs = array.array("I")
         NandAddr.create_block_addr(addrs, block_addr)
         cls.addr_latch(arr, addrs, cs)
 
@@ -429,7 +421,6 @@ class PioCmdBuilder:
         cls.cmd_latch(arr, cmd=NandCommandId.RESET, cs=cs)
         cls.wait_rbb(arr)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
 
     @classmethod
     def seq_read_id(
@@ -443,11 +434,11 @@ class PioCmdBuilder:
         cls.init_pin(arr)
         cls.assert_cs(arr, cs=cs)
         cls.cmd_latch(arr, cmd=NandCommandId.READ_ID, cs=cs)
-        addrs = array.array("I", [offset])  # 1-byte address
+        addrs = array.array("I")
+        addrs.append(offset)  # 1-byte address
         cls.addr_latch(arr, addrs=addrs, cs=cs)
         cls.data_output(arr, data_count=data_count)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
 
     @classmethod
     def seq_read(
@@ -468,7 +459,6 @@ class PioCmdBuilder:
         cls.wait_rbb(arr)
         cls.data_output(arr, data_count=data_count)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
 
     @classmethod
     def seq_status_read(
@@ -482,7 +472,6 @@ class PioCmdBuilder:
         cls.cmd_latch(arr, cmd=NandCommandId.STATUS_READ, cs=cs)
         cls.data_output(arr, data_count=1)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
 
     @classmethod
     def seq_program(
@@ -505,7 +494,6 @@ class PioCmdBuilder:
         cls.cmd_latch(arr, cmd=NandCommandId.STATUS_READ, cs=cs)
         cls.data_output(arr, data_count=1)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
 
     @classmethod
     def seq_erase(
@@ -524,4 +512,3 @@ class PioCmdBuilder:
         cls.cmd_latch(arr, cmd=NandCommandId.STATUS_READ, cs=cs)
         cls.data_output(arr, data_count=1)
         cls.deassert_cs(arr)
-        cls.set_irq(arr)
