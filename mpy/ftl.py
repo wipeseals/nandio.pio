@@ -6,7 +6,7 @@ from sim.nandio_pio import BLOCK, CHIP, LBA, PAGE, PBA, NandConfig
 class NandBlockManager:
     def __init__(
         self,
-        nandcmd: FwNandCommander | FwNandCommander,
+        nandcmd: FwNandCommander,  # | PioNandCommander,
         # initialized values
         is_initial: bool = False,
         num_chip: CHIP = 0,
