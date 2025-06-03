@@ -125,7 +125,7 @@ class PioNandCommander:
             in_shiftdir=rp2.PIO.SHIFT_LEFT,
             out_shiftdir=rp2.PIO.SHIFT_RIGHT,
             autopush=True,
-            push_thresh=32,
+            push_thresh=8,
         )
         def __nandio_pio_asm_impl():
             wrap_target()
@@ -248,11 +248,11 @@ class PioNandCommander:
 
     def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
         # 4byte単位で受信するデータ数
-        read_bytes = Util.roundup4(num_bytes)
+        read_bytes = num_bytes  # Util.roundup4(num_bytes)
 
         ###########################################################
         # Setup PIO State Machine
-        # RESET + READID + IRQ のコマンドシーケンスを送信
+        # RESET + READID のコマンドシーケンスを送信
         sm0 = self.setup_pio0_nandio()
         sm0.active(1)
 
@@ -279,11 +279,11 @@ class PioNandCommander:
         )
         #############################################################
         # Setup RX DMA
-        rx_data = array.array("B", [0] * read_bytes)
+        rx_data = bytearray(read_bytes)
 
         rx_dma0 = rp2.DMA()
         rx_dma0_ctrl = rx_dma0.pack_ctrl(
-            size=2,  # 4byte転送
+            size=0,  # 1byte転送
             inc_read=False,  # rx_fifoは場所固定
             inc_write=True,
             bswap=True,  # 受信データはBig Endianなので、バイトオーダーを反転
@@ -292,7 +292,7 @@ class PioNandCommander:
         rx_dma0.config(
             read=sm0,
             write=rx_data,
-            count=read_bytes // 4,  # 4byte単位で設定
+            count=read_bytes,
             ctrl=rx_dma0_ctrl,
             trigger=True,
         )
@@ -309,6 +309,8 @@ class PioNandCommander:
 
         for i in range(len(rx_data)):
             print(f"RX Data[{i}]: {rx_data[i]:#02x}")
+
+        return rx_data
 
     def read_page(
         self,
