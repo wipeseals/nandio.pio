@@ -439,10 +439,6 @@ class TestPioCmdBuilderSequences:
         assert ret.event_df.iloc[5]["ceb1"] == (0 if cs == 1 else 1)
         # Data Output
         for i in range(data_count):
-            print(
-                f"i={i}, data={ret.received_from_rx_fifo[i]}, "
-                f"event_df={ret.event_df.iloc[i + 6]}"
-            )
             assert ret.event_df.iloc[i + 6]["event"] == "data_out"
             assert ret.event_df.iloc[i + 6]["io_raw"] == ret.received_from_rx_fifo[i]
             assert ret.event_df.iloc[i + 6]["io_dir_raw"] == 0x00  # read
