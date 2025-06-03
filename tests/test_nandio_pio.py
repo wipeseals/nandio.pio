@@ -363,16 +363,9 @@ class TestPioCmdBuilderSequences:
         assert ret.event_df.iloc[1]["ceb1"] == (0 if cs == 1 else 1)
         # Data Output
         for i in range(data_count):
-            # 4byte 1転送に変更したので、期待値はここからbig endianで取り出す
-            word_idx = i // 4
-            word_offset = i % 4
-            expect_data = (
-                ret.received_from_rx_fifo[word_idx] >> (8 * (3 - word_offset)) & 0xFF
-            )
-
             assert ret.event_df.iloc[i + 2]["event"] == "data_out"
             assert (
-                ret.event_df.iloc[i + 2]["io_raw"] == expect_data
+                ret.event_df.iloc[i + 2]["io_raw"] == ret.received_from_rx_fifo[i]
             )  # created random value from the simulator
             assert ret.event_df.iloc[i + 2]["io_dir_raw"] == 0x00  # read
             assert ret.event_df.iloc[i + 2]["ceb0"] == (0 if cs == 0 else 1)
@@ -407,11 +400,11 @@ class TestPioCmdBuilderSequences:
             column_addr,
             page_addr,
             block_addr,
-            Util.roundup4(data_count),
+            data_count,
         )
         ret: Result = Simulator.execute(
             program_str=self.pio_text,
-            test_cycles=100 + data_count * 10,
+            test_cycles=100 + data_count * 20,
             tx_fifo_entries=pio_prg_arr,
         )
 
@@ -446,15 +439,12 @@ class TestPioCmdBuilderSequences:
         assert ret.event_df.iloc[5]["ceb1"] == (0 if cs == 1 else 1)
         # Data Output
         for i in range(data_count):
-            # 4byte 1転送に変更したので、期待値はここからbig endianで取り出す
-            word_idx = i // 4
-            word_offset = i % 4
-            expect_data = (
-                ret.received_from_rx_fifo[word_idx] >> (8 * (3 - word_offset)) & 0xFF
+            print(
+                f"i={i}, data={ret.received_from_rx_fifo[i]}, "
+                f"event_df={ret.event_df.iloc[i + 6]}"
             )
-
             assert ret.event_df.iloc[i + 6]["event"] == "data_out"
-            assert ret.event_df.iloc[i + 6]["io_raw"] == expect_data
+            assert ret.event_df.iloc[i + 6]["io_raw"] == ret.received_from_rx_fifo[i]
             assert ret.event_df.iloc[i + 6]["io_dir_raw"] == 0x00  # read
             assert ret.event_df.iloc[i + 6]["ceb0"] == (0 if cs == 0 else 1)
             assert ret.event_df.iloc[i + 6]["ceb1"] == (0 if cs == 1 else 1)

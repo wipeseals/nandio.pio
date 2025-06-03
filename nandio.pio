@@ -104,13 +104,13 @@ addr_latch_main:
 data_output_setup:
     jmp y--, data_input_setup        side 0b11100 ; cmd_id==3
 data_output_main:
-    nop                          side 0b01100 ;                       /re=0 : 1st cyc (t_rr + t_rea = 40ns / 4cyc => 10ns = 100MHz)
+    nop                          side 0b01100 ;                       /re=0 : 1st cyc (t_rr + t_rea = 40ns / 5cyc => 8ns = 125MHz)
     nop                          side 0b01100 ;                       /re=0 : 2nd cyc
     nop                          side 0b01100 ;                       /re=0 : 3rd cyc
     nop                          side 0b01100 ;                       /re=0 : 4th cyc
+    nop                          side 0b01100 ;                       /re=0 : 5th cyc
     in pins, 8                   side 0b11100 ; pins -> isr           /re=1 : read data (rbbも入力pinのため、io部分だけ取得)
     jmp x-- data_output_main     side 0b11100 ; loop transfer_count + /re=1
-    push block                   side 0b11100 ; isr  -> rxfifo      + /re=1 : push data (非アライン分の末尾)
     jmp setup                    side 0b11100 ;                       /re=1 : finish
 
     ; =========================================================================
