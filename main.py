@@ -247,9 +247,6 @@ class PioNandCommander:
         return sm
 
     def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
-        # 4byte単位で受信するデータ数
-        read_bytes = num_bytes  # Util.roundup4(num_bytes)
-
         ###########################################################
         # Setup PIO State Machine
         # RESET + READID のコマンドシーケンスを送信
@@ -258,7 +255,7 @@ class PioNandCommander:
 
         tx_payload = array.array("I")
         PioCmdBuilder.seq_reset(tx_payload, cs=chip_index)
-        PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index, data_count=read_bytes)
+        PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index, data_count=num_bytes)
 
         ###########################################################
         # Setup TX DMA
@@ -279,7 +276,7 @@ class PioNandCommander:
         )
         #############################################################
         # Setup RX DMA
-        rx_data = bytearray(read_bytes)
+        rx_data = bytearray(num_bytes)
 
         rx_dma0 = rp2.DMA()
         rx_dma0_ctrl = rx_dma0.pack_ctrl(
@@ -292,7 +289,7 @@ class PioNandCommander:
         rx_dma0.config(
             read=sm0,
             write=rx_data,
-            count=read_bytes,
+            count=num_bytes,
             ctrl=rx_dma0_ctrl,
             trigger=True,
         )
