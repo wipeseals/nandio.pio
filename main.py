@@ -39,7 +39,7 @@ class PioNandCommander:
         self,
         nandio: NandIo,
         timeout_ms: int = 1000,
-        max_freq: int = 100_000_000,  # 100MHz
+        max_freq: int = 125_000_000,
     ) -> None:
         self._timeout_ms = timeout_ms
         self._max_freq = max_freq
@@ -186,14 +186,14 @@ class PioNandCommander:
             label("data_out_main")
             # cmd_1 = { reserved }
             # transfer_count分だけ /RE をトグルし、データをGPIOから読み取りpush
-            # /RE=L (t_rr + t_rea = 40ns / 4cyc => 10ns = 100MHz)
+            # /RE=L (t_rr + t_rea = 40ns / 5cyc => 8ns = 125MHz)
             nop().side(self._ss_state_dout0)  # /RE=L 1cyc
             nop().side(self._ss_state_dout0)  # /RE=L 2cyc
             nop().side(self._ss_state_dout0)  # /RE=L 3cyc
             nop().side(self._ss_state_dout0)  # /RE=L 4cyc
+            nop().side(self._ss_state_dout0)  # /RE=L 5cyc
             in_(pins, 8).side(self._ss_state_dout1)  # /RE=H, ceb0/1は無視
             jmp(x_dec, "data_out_main").side(self._ss_state_dout1)  # /RE=H
-            push(block).side(self._ss_state_dout1)  # 非4byte align分の強制吐き出し
             jmp("setup").side(self._ss_state_dout1)
 
             ########################################################################
