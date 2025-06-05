@@ -6,7 +6,7 @@ import rp2
 
 from mpy.driver import NandIo
 from mpy.ftl import FlashTranslationLayer
-from sim.nandio_pio import LBA, NandConfig, PioCmdBuilder, Util
+from sim.nandio_pio import LBA, NandConfig, NandStatus, PioCmdBuilder, Util
 
 
 class Dreq:
@@ -295,6 +295,17 @@ class PioNandCommander:
         )
         return dma
 
+    async def _wait_for_dma(self, dma: rp2.DMA) -> None:
+        """DMAが完了するまで待機"""
+        start_ms = utime.ticks_ms()
+        while dma.active():
+            await uasyncio.sleep_ms(1)
+            elapsed_ms = utime.ticks_diff(utime.ticks_ms(), start_ms)
+            if elapsed_ms > self._timeout_ms:
+                raise RuntimeError(
+                    f"Timeout while waiting for DMA to finish. Elapsed: {elapsed_ms} ms"
+                )
+
     async def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
         sm0 = self._setup_pio0_nandio()
         sm0.active(1)
@@ -314,17 +325,7 @@ class PioNandCommander:
             dreq=Dreq.PIO0_SM0_RX_DREQ, sm=sm0, rx_data=rx_data, num_bytes=num_bytes
         )
         rx_dma0.active(1)
-
-        # wait for finished
-        start_ms = utime.ticks_ms()
-        while rx_dma0.active():
-            await uasyncio.sleep_ms(1)
-            elapsed_ms = utime.ticks_diff(utime.ticks_ms(), start_ms)
-            if elapsed_ms > self._timeout_ms:
-                raise RuntimeError(
-                    f"Timeout while waiting for RX DMA to finish on {self.read_id.__name__}. "
-                    f"Elapsed: {elapsed_ms} ms"
-                )
+        await self._wait_for_dma(rx_dma0)
 
         # finalize
         sm0.active(0)
@@ -364,17 +365,7 @@ class PioNandCommander:
             dreq=Dreq.PIO0_SM0_RX_DREQ, sm=sm0, rx_data=rx_data, num_bytes=num_bytes
         )
         rx_dma0.active(1)
-
-        # wait for finished
-        start_ms = utime.ticks_ms()
-        while rx_dma0.active():
-            await uasyncio.sleep_ms(1)
-            elapsed_ms = utime.ticks_diff(utime.ticks_ms(), start_ms)
-            if elapsed_ms > self._timeout_ms:
-                raise RuntimeError(
-                    f"Timeout while waiting for RX DMA to finish on {self.read_page.__name__}. "
-                    f"Elapsed: {elapsed_ms} ms"
-                )
+        await self._wait_for_dma(rx_dma0)
 
         # finalize
         sm0.active(0)
@@ -400,17 +391,7 @@ class PioNandCommander:
             dreq=Dreq.PIO0_SM0_RX_DREQ, sm=sm0, rx_data=rx_data, num_bytes=1
         )
         rx_dma0.active(1)
-
-        # wait for finished
-        start_ms = utime.ticks_ms()
-        while rx_dma0.active():
-            await uasyncio.sleep_ms(1)
-            elapsed_ms = utime.ticks_diff(utime.ticks_ms(), start_ms)
-            if elapsed_ms > self._timeout_ms:
-                raise RuntimeError(
-                    f"Timeout while waiting for RX DMA to finish on {self.read_status.__name__}. "
-                    f"Elapsed: {elapsed_ms} ms"
-                )
+        await self._wait_for_dma(rx_dma0)
 
         # finalize
         sm0.active(0)
@@ -418,8 +399,34 @@ class PioNandCommander:
         rx_dma0.close()
         return rx_data[0]
 
-    def erase_block(self, chip_index: int, block: int) -> bool:
-        pass
+    async def erase_block(self, chip_index: int, block: int) -> bool:
+        sm0 = self._setup_pio0_nandio()
+        sm0.active(1)
+
+        # TX Payload
+        tx_payload = array.array("I")
+        PioCmdBuilder.seq_erase(tx_payload, cs=chip_index, block_addr=block)
+        PioCmdBuilder.seq_status_read(tx_payload, cs=chip_index)
+        tx_dma0 = self._setup_tx_dma(
+            dreq=Dreq.PIO0_SM0_TX_DREQ, sm=sm0, tx_payload=tx_payload
+        )
+        tx_dma0.active(1)
+
+        # RX Data
+        rx_data = bytearray(1)
+        rx_dma0 = self._setup_rx_dma(
+            dreq=Dreq.PIO0_SM0_RX_DREQ, sm=sm0, rx_data=rx_data, num_bytes=1
+        )
+        rx_dma0.active(1)
+        await self._wait_for_dma(rx_dma0)
+
+        # finalize
+        sm0.active(0)
+        tx_dma0.close()
+        rx_dma0.close()
+
+        is_ok = (rx_data[0] & NandStatus.PROGRAM_ERASE_FAIL) == 0
+        return is_ok
 
     def program_page(
         self,
@@ -445,6 +452,12 @@ async def test_pio() -> None:
 
     status = await pio_commander.read_status(chip_index=0)
     print(f"Read Status: {status:02x}")
+
+    is_erased = await pio_commander.erase_block(chip_index=0, block=0)
+    print(f"Erase Block Result: {'Success' if is_erased else 'Failure'}")
+
+    data = await pio_commander.read_page(cs=0, block=0, page=0, col=0)
+    print(f"Read Page Data: {list(data)}")
 
 
 async def main() -> None:
