@@ -382,8 +382,41 @@ class PioNandCommander:
         rx_dma0.close()
         return rx_data
 
-    def read_status(self, chip_index: int) -> int:
-        pass
+    async def read_status(self, chip_index: int) -> int:
+        sm0 = self._setup_pio0_nandio()
+        sm0.active(1)
+
+        # TX Payload
+        tx_payload = array.array("I")
+        PioCmdBuilder.seq_status_read(tx_payload, cs=chip_index)
+        tx_dma0 = self._setup_tx_dma(
+            dreq=Dreq.PIO0_SM0_TX_DREQ, sm=sm0, tx_payload=tx_payload
+        )
+        tx_dma0.active(1)
+
+        # RX Data
+        rx_data = bytearray(1)
+        rx_dma0 = self._setup_rx_dma(
+            dreq=Dreq.PIO0_SM0_RX_DREQ, sm=sm0, rx_data=rx_data, num_bytes=1
+        )
+        rx_dma0.active(1)
+
+        # wait for finished
+        start_ms = utime.ticks_ms()
+        while rx_dma0.active():
+            await uasyncio.sleep_ms(1)
+            elapsed_ms = utime.ticks_diff(utime.ticks_ms(), start_ms)
+            if elapsed_ms > self._timeout_ms:
+                raise RuntimeError(
+                    f"Timeout while waiting for RX DMA to finish on {self.read_status.__name__}. "
+                    f"Elapsed: {elapsed_ms} ms"
+                )
+
+        # finalize
+        sm0.active(0)
+        tx_dma0.close()
+        rx_dma0.close()
+        return rx_data[0]
 
     def erase_block(self, chip_index: int, block: int) -> bool:
         pass
@@ -409,6 +442,9 @@ async def test_pio() -> None:
 
     data = await pio_commander.read_page(cs=0, block=0, page=0, col=0)
     print(f"Read Page Data: {list(data)}")
+
+    status = await pio_commander.read_status(chip_index=0)
+    print(f"Read Status: {status:02x}")
 
 
 async def main() -> None:
