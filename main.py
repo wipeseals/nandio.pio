@@ -1,3 +1,5 @@
+import uasyncio
+import utime
 from micropython import const
 import array
 import rp2
@@ -5,6 +7,24 @@ import rp2
 from mpy.driver import NandIo
 from mpy.ftl import FlashTranslationLayer
 from sim.nandio_pio import LBA, NandConfig, PioCmdBuilder, Util
+
+
+class Dreq:
+    """
+    DREQ Assign
+    DREQ# = PIO# * 4 + (4 if RX else 0) + SM#
+    | PIO | SM | PORT | DREQ# | Description           |
+    |-----|----| -----|-------|-----------------------|
+    | 0   | 0  | TX   | 0     | PIO0 SM0 TX DREQ      |
+    | 0   | 0  | RX   | 4     | PIO0 SM0 RX DREQ      |
+    | 1   | 0  | TX   | 8     | PIO1 SM0 TX DREQ      |
+    | 1   | 0  | RX   | 12    | PIO1 SM0 RX DREQ      |
+    """
+
+    PIO0_SM0_TX_DREQ = const(0)
+    PIO0_SM0_RX_DREQ = const(4)
+    PIO1_SM0_TX_DREQ = const(8)
+    PIO1_SM0_RX = const(12)
 
 
 class PioNandCommander:
@@ -38,10 +58,10 @@ class PioNandCommander:
     def __init__(
         self,
         nandio: NandIo,
-        timeout_ms: int = 1000,
+        timeout_sec: int = 10,
         max_freq: int = 125_000_000,
     ) -> None:
-        self._timeout_ms = timeout_ms
+        self._timeout_ms = timeout_sec
         self._max_freq = max_freq
         self._nandio = nandio
         # for PIO
@@ -219,20 +239,7 @@ class PioNandCommander:
 
         self._nandio_pio_asm = __nandio_pio_asm_impl
 
-        # DREQ Assign
-        # DREQ# = PIO# * 4 + (4 if RX else 0) + SM#
-        # | PIO | SM | PORT | DREQ# | Description           |
-        # |-----|----| -----|-------|-----------------------|
-        # | 0   | 0  | TX   | 0     | PIO0 SM0 TX DREQ      |
-        # | 0   | 0  | RX   | 4     | PIO0 SM0 RX DREQ      |
-        # | 1   | 0  | TX   | 8     | PIO1 SM0 TX DREQ      |
-        # | 1   | 0  | RX   | 12    | PIO1 SM0 RX DREQ      |
-        self._pio0_sm0_tx_dreq = const(0)
-        self._pio0_sm0_rx_dreq = const(4)
-        self._pio1_sm0_tx_dreq = const(8)
-        self._pio1_sm0_rx_dreq = const(12)
-
-    def setup_pio0_nandio(self) -> rp2.StateMachine:
+    def _setup_pio0_nandio(self) -> rp2.StateMachine:
         """nandio.pioのセットアップ"""
         sm = rp2.StateMachine(0)
         sm.init(
@@ -246,67 +253,83 @@ class PioNandCommander:
         )  # type: ignore
         return sm
 
-    def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
-        ###########################################################
-        # Setup PIO State Machine
-        # RESET + READID のコマンドシーケンスを送信
-        sm0 = self.setup_pio0_nandio()
-        sm0.active(1)
-
-        tx_payload = array.array("I")
-        PioCmdBuilder.seq_reset(tx_payload, cs=chip_index)
-        PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index, data_count=num_bytes)
-
-        ###########################################################
-        # Setup TX DMA
-        tx_dma0 = rp2.DMA()
-        tx_dma0_ctrl = tx_dma0.pack_ctrl(
+    def _setup_tx_dma(
+        self, dreq: int, sm: rp2.StateMachine, tx_payload: array.array
+    ) -> rp2.DMA:
+        """TX payload送信用DMAのセットアップ"""
+        dma = rp2.DMA()
+        tx_dma0_ctrl = dma.pack_ctrl(
             size=2,  # 4byte転送
             inc_read=True,
             inc_write=False,  # tx_fifoは場所固定
             bswap=False,
-            treq_sel=self._pio0_sm0_tx_dreq,  # PIO0 SM0 TX DREQ
+            treq_sel=dreq,
         )
-        tx_dma0.config(
+        dma.config(
             read=tx_payload,
-            write=sm0,
+            write=sm,
             count=len(tx_payload),
             ctrl=tx_dma0_ctrl,
-            trigger=True,
+            trigger=False,  # 自動開始しない
         )
-        #############################################################
-        # Setup RX DMA
-        rx_data = bytearray(num_bytes)
+        return dma
 
-        rx_dma0 = rp2.DMA()
-        rx_dma0_ctrl = rx_dma0.pack_ctrl(
+    def _setup_rx_dma(
+        self, dreq: int, sm: rp2.StateMachine, rx_data: bytearray, num_bytes: int
+    ) -> rp2.DMA:
+        """RX payload受信用DMAのセットアップ"""
+        dma = rp2.DMA()
+        rx_dma0_ctrl = dma.pack_ctrl(
             size=0,  # 1byte転送
             inc_read=False,  # rx_fifoは場所固定
             inc_write=True,
-            bswap=True,  # 受信データはBig Endianなので、バイトオーダーを反転
-            treq_sel=self._pio0_sm0_rx_dreq,  # PIO0 SM0 RX DREQ
+            bswap=False,
+            treq_sel=dreq,
         )
-        rx_dma0.config(
-            read=sm0,
+        dma.config(
+            read=sm,
             write=rx_data,
             count=num_bytes,
             ctrl=rx_dma0_ctrl,
-            trigger=True,
+            trigger=False,
         )
+        return dma
 
-        #############################################################
+    async def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
+        sm0 = self._setup_pio0_nandio()
+        sm0.active(1)
+
+        # TX Payload
+        tx_payload = array.array("I")
+        PioCmdBuilder.seq_reset(tx_payload, cs=chip_index)
+        PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index, data_count=num_bytes)
+        tx_dma0 = self._setup_tx_dma(
+            dreq=Dreq.PIO0_SM0_TX_DREQ, sm=sm0, tx_payload=tx_payload
+        )
+        tx_dma0.active(1)
+
+        # RX Data
+        rx_data = bytearray(num_bytes)
+        rx_dma0 = self._setup_rx_dma(
+            dreq=Dreq.PIO0_SM0_RX_DREQ, sm=sm0, rx_data=rx_data, num_bytes=num_bytes
+        )
+        rx_dma0.active(1)
+
         # wait for finished
+        start_ms = utime.ticks_ms()
         while rx_dma0.active():
-            print(
-                f"waiting. tx_dma0.active(): {tx_dma0.active()}, tx_fifo: {sm0.tx_fifo()}, rx_fifo: {sm0.rx_fifo()}, rx_dma0.active(): {rx_dma0.active()}"
-            )
+            await uasyncio.sleep_ms(1)
+            elapsed_ms = utime.ticks_diff(utime.ticks_ms(), start_ms)
+            if elapsed_ms > self._timeout_ms:
+                raise RuntimeError(
+                    f"Timeout while waiting for RX DMA to finish on {self.read_id.__name__}. "
+                    f"Elapsed: {elapsed_ms} ms"
+                )
+
+        # finalize
         sm0.active(0)
         tx_dma0.close()
         rx_dma0.close()
-
-        for i in range(len(rx_data)):
-            print(f"RX Data[{i}]: {rx_data[i]:#02x}")
-
         return rx_data
 
     def read_page(
@@ -336,13 +359,16 @@ class PioNandCommander:
         pass
 
 
-def test_pio() -> None:
+async def test_pio() -> None:
     nandio = NandIo()
     pio_commander = PioNandCommander(nandio)
-    pio_commander.read_id(0)
+    id = await pio_commander.read_id(0)
+
+    for i, byte in enumerate(id):
+        print(f"ID Byte {i}: {byte:02x}")
 
 
-def main() -> None:
+async def main() -> None:
     ftl = FlashTranslationLayer()
 
     def create_test_data(lba: LBA) -> bytearray:
@@ -357,5 +383,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    test_pio()
+    uasyncio.run(test_pio())
     # main()
