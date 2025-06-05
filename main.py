@@ -541,112 +541,33 @@ class PioNandCommander:
         sm0 = self._setup_pio0_nandio()
         sm0.active(1)
 
-        ##################################################################
-        # DMA Configuration
-        #
-        # Descriptors:
-        # - [tx_dma0]: TX Payload0      -> PIO0/SM0 TX FIFO
-        # - [tx_dma1]: TX Data          -> PIO1/SM0 TX FIFO
-        # - [tx_dma2]: TX Payload2      -> PIO0/SM0 TX FIFO
-        # - [rx_dma0]: PIO0/SM0 RX FIFO -> rx_data
-        #
+        data_extend = array.array("I", [x for x in data])
         tx_payload0 = array.array("I")
-        PioCmdBuilder.init_pin(tx_payload0)
-        PioCmdBuilder.assert_cs(tx_payload0, cs=chip_index)
-        PioCmdBuilder.cmd_latch(
-            tx_payload0, cmd=NandCommandId.PROGRAM_1ST, cs=chip_index
-        )
-        PioCmdBuilder.full_addr_latch(
+        PioCmdBuilder.seq_program(
             tx_payload0,
+            cs=chip_index,
             column_addr=col,
             page_addr=page,
             block_addr=block,
-            cs=chip_index,
+            data=data_extend,
         )
-        PioCmdBuilder.data_input_only_header(tx_payload0, data_count=len(data))
-        data_body = await self._bitor_cs(chip_index, data)
-        tx_payload2 = array.array("I")
-        PioCmdBuilder.cmd_latch(
-            tx_payload2, cmd=NandCommandId.PROGRAM_2ND, cs=chip_index
-        )
-        PioCmdBuilder.wait_rbb(tx_payload2)
-        PioCmdBuilder.cmd_latch(
-            tx_payload2, cmd=NandCommandId.STATUS_READ, cs=chip_index
-        )
-        PioCmdBuilder.data_output(tx_payload2, data_count=1)
-        PioCmdBuilder.deassert_cs(tx_payload2)
 
-        tx_dma0 = rp2.DMA()
-        tx_dma1 = rp2.DMA()
-        tx_dma2 = rp2.DMA()
-        rx_dma0 = rp2.DMA()
+        tx_dma0 = self._setup_tx_dma_payload(
+            dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload0
+        )
+        tx_dma0.active(1)
 
-        # TX Payload0 -> PIO0/SM0 TX FIFO
-        tx_dma0_ctrl = tx_dma0.pack_ctrl(
-            size=2,  # 4byte転送
-            inc_read=True,
-            inc_write=False,  # tx_fifoは場所固定
-            treq_sel=Dreq.PIO0_SM0_TX,
-            chain_to=tx_dma1.channel,  # type: ignore
-        )
-        tx_dma0.config(
-            read=tx_payload0,
-            write=sm0,
-            count=len(tx_payload0),
-            ctrl=tx_dma0_ctrl,
-            trigger=False,  # 自動開始しない
-        )
-        # TX Data -> PIO1/SM0 TX FIFO
-        tx_dma1_ctrl = tx_dma1.pack_ctrl(
-            size=2,  # 4byte転送
-            inc_read=True,
-            inc_write=False,  # tx_fifoは場所固定
-            bswap=False,
-            treq_sel=Dreq.PIO1_SM0_TX,
-            chain_to=tx_dma2.channel,  # type: ignore
-        )
-        tx_dma1.config(
-            read=data_body,
-            write=sm0,
-            count=len(data_body),
-            ctrl=tx_dma1_ctrl,
-            trigger=False,  # 自動開始しない
-        )
-        # TX Payload2 -> PIO0/SM0 TX FIFO
-        tx_dma2_ctrl = tx_dma2.pack_ctrl(
-            size=2,  # 4byte転送
-            inc_read=True,
-            inc_write=False,  # tx_fifoは場所固定
-            treq_sel=Dreq.PIO0_SM0_TX,
-        )
-        tx_dma2.config(
-            read=tx_payload2,
-            write=sm0,
-            count=len(tx_payload2),
-            ctrl=tx_dma2_ctrl,
-            trigger=False,  # 自動開始しない
-        )
-        # PIO0/SM0 RX FIFO -> rx_data (statusread)
         rx_data = bytearray(1)
         rx_dma0 = self._setup_rx_dma_data(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
         )
+        rx_dma0.active(1)
 
-        # start transfer
-        tx_dma0.active(1)  # Payload/Data/Payload: tx1,tx2はchainで自動開始される
-        rx_dma0.active(1)  # Receive DMA
-        await self._wait_for_dma(
-            rx_dma0,
-            f=lambda: print(
-                f"sm0:{sm0.active()} tx_dma0:{tx_dma0.active()}, tx_dma1:{tx_dma1.active()}, tx_dma2:{tx_dma2.active()}, rx_dma0:{rx_dma0.active()}"
-            ),
-        )
+        await self._wait_for_dma(rx_dma0)
 
         # finalize
         sm0.active(0)
         tx_dma0.close()
-        tx_dma1.close()
-        tx_dma2.close()
         rx_dma0.close()
 
         is_ok = (rx_data[0] & NandStatus.PROGRAM_ERASE_FAIL) == 0
