@@ -19,8 +19,6 @@ async def test_seq_wr(ftl: FlashTranslationLayer, num_lb: int | None = None) -> 
         print(f"Writing logical block {lba}...")
         data = create_test_data(lba)
         await ftl.write_logical(lba, data)
-        read_data = await ftl.read_logical(lba)
-        assert read_data == data
     print("Sequential write test completed.")
 
     print(f"Reading back {num_lb} logical blocks to verify...")
@@ -44,7 +42,7 @@ async def main() -> None:
         print(f"Failed to load config: {e}")
         await ftl.init_config()
 
-    await test_seq_wr(ftl, num_lb=10)
+    await test_seq_wr(ftl, num_lb=ftl.report_capacity_lb())
 
     # ftl.save_config()
     ftl.save_config()
