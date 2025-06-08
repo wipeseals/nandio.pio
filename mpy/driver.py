@@ -843,9 +843,15 @@ class PioNandCommander:
         )
         # 00: Original
         # PioCmdBuilder.data_input(tx_payload0, data=data_extend, cs=chip_index)
+
         # 01: Prepared
+        # PioCmdBuilder.data_input_only_header(tx_payload0, len(data))
+        # Util.apply_cs_to_data_array(data_extend, cs=chip_index)
+        # tx_payload0.extend(data_extend)  # Append data to the payload
+
+        # 02: BitOR CSをPIO版
+        data_extend = await self._bitor_cs(chip_index, data)
         PioCmdBuilder.data_input_only_header(tx_payload0, len(data))
-        Util.apply_cs_to_data_array(data_extend, cs=chip_index)
         tx_payload0.extend(data_extend)  # Append data to the payload
 
         PioCmdBuilder.cmd_latch(
