@@ -21,6 +21,8 @@ async def test_seq_wr(ftl: FlashTranslationLayer, num_lb: int | None = None) -> 
         await ftl.write_logical(lba, data)
     print("Sequential write test completed.")
 
+    await ftl.flush()
+
     print(f"Reading back {num_lb} logical blocks to verify...")
     for lba in range(num_lb):
         data = await ftl.read_logical(lba)
@@ -50,8 +52,8 @@ async def test_sample(ftl: FlashTranslationLayer) -> None:
 
 async def main() -> None:
     nandio = NandIo(keep_wp=False)
-    # commander = PioNandCommander(nandio)
-    commander = FwNandCommander(nandio)
+    commander = PioNandCommander(nandio)
+    # commander = FwNandCommander(nandio)
     ftl = FlashTranslationLayer(nandio, commander)
     try:
         ftl.load_config()
@@ -59,6 +61,8 @@ async def main() -> None:
     except Exception as e:
         print(f"Failed to load config: {e}")
         await ftl.init_config()
+    # reset NAND IC
+    await ftl.setup_nandio()
 
     await test_sample(ftl)
     # await test_seq_wr(ftl, num_lb=ftl.report_capacity_lb())

@@ -191,9 +191,19 @@ class FwNandCommander:
         self._timeout_ms = timeout_ms
         self._nandio = nandio
 
-    ########################################################
-    # Communication functions
-    ########################################################
+    async def reset(self, chip_index: int) -> None:
+        nandio = self._nandio
+
+        await nandio.init_pin()
+        await nandio.set_ceb(chip_index=chip_index)
+        await nandio.input_cmd(NandCommandId.RESET)
+        await nandio.set_ceb(None)
+
+        # wait for RBB to be set
+        is_ok = await nandio.wait_busy(timeout_ms=self._timeout_ms)
+        if not is_ok:
+            raise RuntimeError("NAND reset failed: RBB did not clear in time.")
+
     async def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
         nandio = self._nandio
 
@@ -343,7 +353,7 @@ class PioNandCommander:
         self,
         nandio: NandIo,
         timeout_ms: int = 5000,
-        max_freq: int = 100_000_000,  # Max: 125MHz だが安定優先で少し下げる
+        max_freq: int = 125_000_000,  # Max: 125MHz だが安定優先で少し下げる
     ) -> None:
         self._timeout_ms = timeout_ms
         self._max_freq = max_freq
@@ -661,13 +671,31 @@ class PioNandCommander:
                     f"Timeout while waiting for DMA to finish. Elapsed: {elapsed_ms} ms"
                 )
 
+    async def reset(self, chip_index) -> None:
+        sm0 = self._setup_pio0_nandio()
+        sm0.active(1)
+
+        # TX Payload
+        tx_payload = array.array("I")
+        PioCmdBuilder.seq_reset(tx_payload, cs=chip_index)  # w/ wait RBB
+        tx_dma0 = self._setup_tx_dma_word(
+            dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
+        )
+        tx_dma0.active(1)
+
+        await self._wait_for_dma(tx_dma0)
+        # wait after RESET
+        await uasyncio.sleep_ms(100)
+
+        sm0.active(0)
+        tx_dma0.close()
+
     async def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
         sm0 = self._setup_pio0_nandio()
         sm0.active(1)
 
         # TX Payload
         tx_payload = array.array("I")
-        PioCmdBuilder.seq_reset(tx_payload, cs=chip_index)
         PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index, data_count=num_bytes)
         tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload

@@ -559,8 +559,19 @@ class FlashTranslationLayer:
         self._mapping.load_config(self.config)
         return True
 
+    async def setup_nandio(self) -> None:
+        """NandIoの設定を行う"""
+        for cs_index in range(self._blockmng.num_chip):
+            # Reset + ReadIDで疎通確認
+            await self.nandcmd.reset(chip_index=cs_index)
+            id = await self.nandcmd.read_id(chip_index=cs_index)
+            if id != NandConfig.READ_ID_EXPECT:
+                raise ValueError(
+                    f"Chip {cs_index} ID mismatch: expected {NandConfig.READ_ID_EXPECT}, got {id}"
+                )
+
     def report_capacity_lb(self) -> int:
-        """FTLの容量を返す"""
+        """FTLが提供可能な容量を返す"""
         # 搭載された全部の容量
         total_capacity = self._blockmng.num_total_capacity()
         # max:1024/min:1004blockであることや後のエラーで減ることを想定して設定
