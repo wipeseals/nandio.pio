@@ -352,12 +352,18 @@ class PioNandCommander:
     def __init__(
         self,
         nandio: NandIo,
-        timeout_ms: int = 5000,
+        timeout_ms: int = 10_000,
         max_freq: int = 125_000_000,
     ) -> None:
         self._timeout_ms = timeout_ms
         self._max_freq = max_freq
         self._nandio = nandio
+        # fixed buffer (データの大きいwrite/readだけ固定用意)
+        self._datain_data_buf = array.array(
+            "I", NandConfig.PAGE_ALL_BYTES * [0]
+        )  # CS mergeするので4byte/entry
+        self._dataout_data_buf = bytearray(NandConfig.PAGE_ALL_BYTES)
+
         # for PIO
         self._out_pins = [
             nandio._io0,
@@ -618,7 +624,7 @@ class PioNandCommander:
         sm: rp2.StateMachine,
         data: bytearray,
     ) -> rp2.DMA:
-        """TX payload送信用DMAのセットアップ"""
+        """TX Data送信用DMAのセットアップ"""
         dma = rp2.DMA()
 
         tx_dma0_ctrl = dma.pack_ctrl(
@@ -744,7 +750,8 @@ class PioNandCommander:
         )
 
         # RX Data
-        rx_data = bytearray(num_bytes)
+        # rx_data = bytearray(num_bytes)
+        rx_data = self._dataout_data_buf  # use fixed buffer
         rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=num_bytes
         )
@@ -830,7 +837,8 @@ class PioNandCommander:
 
         tx_dma0 = self._setup_tx_dma_byte(dreq=Dreq.PIO1_SM0_TX, sm=sm4, data=data)
 
-        rx_data = array.array("I", Util.roundup4(len(data)) * [0])
+        # rx_data = array.array("I", Util.roundup4(len(data)) * [0])
+        self._datain_data_buf
         rx_dma0 = rp2.DMA()
         rx_dma0_ctrl = rx_dma0.pack_ctrl(
             size=2,  # 4byte転送
@@ -840,8 +848,8 @@ class PioNandCommander:
         )
         rx_dma0.config(
             read=sm4,
-            write=rx_data,
-            count=len(rx_data),
+            write=self._datain_data_buf,
+            count=len(self._datain_data_buf),
             ctrl=rx_dma0_ctrl,
             trigger=False,
         )
@@ -855,7 +863,7 @@ class PioNandCommander:
         tx_dma0.close()
         rx_dma0.close()
 
-        return rx_data
+        return self._datain_data_buf
 
     async def program_page(
         self,
@@ -895,8 +903,18 @@ class PioNandCommander:
             return tx_payload0
 
         async def _create_payload1() -> array.array:
-            tx_payload1 = await self._bitor_cs(chip_index, data)
+            # manual create
+            tx_payload1 = array.array("I", Util.roundup4(len(data)) * [0])
+            Util.apply_cs_to_data_array(tx_payload0, chip_index)
             return tx_payload1
+
+            # use fixed buffer
+            # await self._bitor_cs(chip_index, data)
+            # return self._datain_data_buf
+
+            # dynamic buffer
+            # tx_payload1 = await self._bitor_cs(chip_index, data)
+            # return tx_payload1
 
         async def _create_payload2() -> array.array:
             tx_payload2 = array.array("I")
