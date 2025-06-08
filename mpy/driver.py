@@ -569,14 +569,21 @@ class PioNandCommander:
         )  # type: ignore
         return sm
 
-    def _setup_tx_dma_payload(
+    def _setup_tx_dma_word(
         self,
         dreq: int,
         sm: rp2.StateMachine,
         tx_payload: array.array,
+        dma: rp2.DMA | None = None,
+        chain_dma: rp2.DMA | None = None,
     ) -> rp2.DMA:
         """TX payload送信用DMAのセットアップ"""
-        dma = rp2.DMA()
+
+        # Channel指定されていなければ新規確保
+        if dma is None:
+            dma = rp2.DMA()
+        # chain先が指定されていたらそのDMAのchannel、指定がなければ自身(Chainしない)
+        chain_to: int = dma.channel if chain_dma is None else chain_dma.channel  # type: ignore
 
         tx_dma0_ctrl = dma.pack_ctrl(
             size=2,  # 4byte転送
@@ -584,6 +591,7 @@ class PioNandCommander:
             inc_write=False,  # tx_fifoは場所固定
             bswap=False,
             treq_sel=dreq,
+            chain_to=chain_to,
         )
         dma.config(
             read=tx_payload,
@@ -594,7 +602,7 @@ class PioNandCommander:
         )
         return dma
 
-    def _setup_tx_dma_data(
+    def _setup_tx_dma_byte(
         self,
         dreq: int,
         sm: rp2.StateMachine,
@@ -619,7 +627,7 @@ class PioNandCommander:
         )
         return dma
 
-    def _setup_rx_dma_data(
+    def _setup_rx_dma_byte(
         self, dreq: int, sm: rp2.StateMachine, rx_data: bytearray, num_bytes: int
     ) -> rp2.DMA:
         """データ受信用DMAのセットアップ"""
@@ -661,14 +669,14 @@ class PioNandCommander:
         tx_payload = array.array("I")
         PioCmdBuilder.seq_reset(tx_payload, cs=chip_index)
         PioCmdBuilder.seq_read_id(tx_payload, cs=chip_index, data_count=num_bytes)
-        tx_dma0 = self._setup_tx_dma_payload(
+        tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
         )
         tx_dma0.active(1)
 
         # RX Data
         rx_data = bytearray(num_bytes)
-        rx_dma0 = self._setup_rx_dma_data(
+        rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=num_bytes
         )
         rx_dma0.active(1)
@@ -701,14 +709,14 @@ class PioNandCommander:
             block_addr=block,
             data_count=num_bytes,
         )
-        tx_dma0 = self._setup_tx_dma_payload(
+        tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
         )
         tx_dma0.active(1)
 
         # RX Data
         rx_data = bytearray(num_bytes)
-        rx_dma0 = self._setup_rx_dma_data(
+        rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=num_bytes
         )
         rx_dma0.active(1)
@@ -727,14 +735,14 @@ class PioNandCommander:
         # TX Payload
         tx_payload = array.array("I")
         PioCmdBuilder.seq_status_read(tx_payload, cs=chip_index)
-        tx_dma0 = self._setup_tx_dma_payload(
+        tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
         )
         tx_dma0.active(1)
 
         # RX Data
         rx_data = bytearray(1)
-        rx_dma0 = self._setup_rx_dma_data(
+        rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
         )
         rx_dma0.active(1)
@@ -754,14 +762,14 @@ class PioNandCommander:
         tx_payload = array.array("I")
         PioCmdBuilder.seq_erase(tx_payload, cs=chip_index, block_addr=block)
         PioCmdBuilder.seq_status_read(tx_payload, cs=chip_index)
-        tx_dma0 = self._setup_tx_dma_payload(
+        tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
         )
         tx_dma0.active(1)
 
         # RX Data
         rx_data = bytearray(1)
-        rx_dma0 = self._setup_rx_dma_data(
+        rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
         )
         rx_dma0.active(1)
@@ -784,7 +792,7 @@ class PioNandCommander:
         bitor_data = 0xFFFFFFFF & ~(1 << chip_index)
         sm4.put(bitor_data)
 
-        tx_dma0 = self._setup_tx_dma_data(dreq=Dreq.PIO1_SM0_TX, sm=sm4, data=data)
+        tx_dma0 = self._setup_tx_dma_byte(dreq=Dreq.PIO1_SM0_TX, sm=sm4, data=data)
         tx_dma0.active(1)
 
         rx_data = array.array("I", Util.roundup4(len(data)) * [0])
@@ -818,17 +826,9 @@ class PioNandCommander:
         sm0 = self._setup_pio0_nandio()
         sm0.active(1)
 
-        data_extend = array.array("I", [x for x in data])
         tx_payload0 = array.array("I")
-        PioCmdBuilder.seq_program(
-            tx_payload0,
-            cs=chip_index,
-            column_addr=col,
-            page_addr=page,
-            block_addr=block,
-            data=data_extend,
-        )
-
+        tx_payload1 = array.array("I")
+        tx_payload2 = array.array("I")
         PioCmdBuilder.init_pin(tx_payload0)
         PioCmdBuilder.assert_cs(tx_payload0, cs=chip_index)
         PioCmdBuilder.cmd_latch(
@@ -850,32 +850,66 @@ class PioNandCommander:
         # tx_payload0.extend(data_extend)  # Append data to the payload
 
         # 02: BitOR CSをPIO版
-        data_extend = await self._bitor_cs(chip_index, data)
+        # PioCmdBuilder.data_input_only_header(tx_payload0, len(data))
+        # data_extend = await self._bitor_cs(chip_index, data)
+        # tx_payload0.extend(data_extend)  # Append data to the payload
+
+        # 03: Descriptor分割版
         PioCmdBuilder.data_input_only_header(tx_payload0, len(data))
-        tx_payload0.extend(data_extend)  # Append data to the payload
+
+        data_extend = await self._bitor_cs(chip_index, data)
+        tx_payload1.extend(data_extend)  # Append data to the payload
 
         PioCmdBuilder.cmd_latch(
-            tx_payload0, cmd=NandCommandId.PROGRAM_2ND, cs=chip_index
+            tx_payload2, cmd=NandCommandId.PROGRAM_2ND, cs=chip_index
         )
-        PioCmdBuilder.wait_rbb(tx_payload0)
+        PioCmdBuilder.wait_rbb(tx_payload2)
         PioCmdBuilder.cmd_latch(
-            tx_payload0, cmd=NandCommandId.STATUS_READ, cs=chip_index
+            tx_payload2, cmd=NandCommandId.STATUS_READ, cs=chip_index
         )
-        PioCmdBuilder.data_output(tx_payload0, data_count=1)
-        PioCmdBuilder.deassert_cs(tx_payload0)
+        PioCmdBuilder.data_output(tx_payload2, data_count=1)
+        PioCmdBuilder.deassert_cs(tx_payload2)
 
-        tx_dma0 = self._setup_tx_dma_payload(
-            dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload0
+        # TX PayloadのChain用に事前確保
+        tx_dma0 = rp2.DMA()
+        tx_dma1 = rp2.DMA()
+        tx_dma2 = rp2.DMA()
+
+        self._setup_tx_dma_word(
+            dreq=Dreq.PIO0_SM0_TX,
+            sm=sm0,
+            tx_payload=tx_payload0,
+            dma=tx_dma0,
+            chain_dma=tx_dma1,
         )
+        self._setup_tx_dma_word(
+            dreq=Dreq.PIO0_SM0_TX,
+            sm=sm0,
+            tx_payload=tx_payload1,
+            dma=tx_dma1,
+            chain_dma=tx_dma2,
+        )
+        self._setup_tx_dma_word(
+            dreq=Dreq.PIO0_SM0_TX,
+            sm=sm0,
+            tx_payload=tx_payload2,
+            dma=tx_dma2,
+        )
+        # TX Payload0だけを開始、残りはchain
         tx_dma0.active(1)
 
         rx_data = bytearray(1)
-        rx_dma0 = self._setup_rx_dma_data(
+        rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
         )
         rx_dma0.active(1)
 
-        await self._wait_for_dma(rx_dma0)
+        await self._wait_for_dma(
+            rx_dma0,
+            lambda: print(
+                f"tx_dma0.active(): {tx_dma0.active()}, tx_dma1.active(): {tx_dma1.active()}, tx_dma2.active(): {tx_dma2.active()}, rx_dma0.active(): {rx_dma0.active()}"
+            ),
+        )
 
         # finalize
         sm0.active(0)
@@ -907,13 +941,13 @@ class PioNandCommander:
             data=data_extend,
         )
 
-        tx_dma0 = self._setup_tx_dma_payload(
+        tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload0
         )
         tx_dma0.active(1)
 
         rx_data = bytearray(1)
-        rx_dma0 = self._setup_rx_dma_data(
+        rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
         )
         rx_dma0.active(1)
