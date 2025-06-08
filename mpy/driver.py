@@ -343,7 +343,7 @@ class PioNandCommander:
         self,
         nandio: NandIo,
         timeout_ms: int = 5000,
-        max_freq: int = 125_000_000,
+        max_freq: int = 100_000_000,  # Max: 125MHz だが安定優先で少し下げる
     ) -> None:
         self._timeout_ms = timeout_ms
         self._max_freq = max_freq
