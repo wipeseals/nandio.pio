@@ -291,6 +291,7 @@ class DmaUtil:
         dma.active(True)
         while dma.active():
             await uasyncio.sleep_ms(1)
+        dma.close()
 
 
 class Mapping:
