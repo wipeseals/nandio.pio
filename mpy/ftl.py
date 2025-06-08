@@ -47,9 +47,37 @@ class NandBlockManager:
         self.num_chip: int = 0
         self.badblock_bitmaps: list[int] = []
 
-    ########################################################
-    # Wrapper functions
-    ########################################################
+    def num_blocks(self) -> int:
+        """使用可能なNAND Block数を返す"""
+        return self.num_chip * NandConfig.BLOCKS_PER_CS
+
+    def num_usable_blocks(self) -> int:
+        """使用可能なNAND Block数を返す"""
+        num_usable = 0
+        for chip_index in range(self.num_chip):
+            num_usable += NandConfig.BLOCKS_PER_CS - bin(
+                self.badblock_bitmaps[chip_index]
+            ).count("1")
+        return num_usable
+
+    def num_bad_blocks(self) -> int:
+        """Bad Block数を返す"""
+        num_bad = 0
+        for chip_index in range(self.num_chip):
+            num_bad += bin(self.badblock_bitmaps[chip_index]).count("1")
+        return num_bad
+
+    def num_allocated_blocks(self) -> int:
+        """確保済みのNAND Block数を返す"""
+        num_allocated = 0
+        for chip_index in range(self.num_chip):
+            num_allocated += bin(self.allocated_bitmaps[chip_index]).count("1")
+        return num_allocated
+
+    def num_total_capacity(self) -> int:
+        """総容量を返す (バイト単位)"""
+        return self.num_chip * NandConfig.BLOCKS_PER_CS * NandConfig.BLOCK_USABLE_BYTES
+
     async def _check_chip_num(
         self,
         check_num_chip: CHIP = 2,
@@ -264,36 +292,6 @@ class PageCodec:
         return data[: NandConfig.PAGE_USABLE_BYTES]  # Parity除去
 
 
-class DmaUtil:
-    @staticmethod
-    def setup_copy(src_buf: bytearray, dst_buf: bytearray) -> rp2.DMA:
-        dma = rp2.DMA()
-        ctrl = dma.pack_ctrl(
-            size=0,  # 1byte転送
-            inc_read=True,
-            inc_write=True,
-        )
-        dma.config(
-            read=src_buf,
-            write=dst_buf,
-            count=len(src_buf),
-            ctrl=ctrl,
-            trigger=False,  # 自動開始しない
-        )
-        return dma
-
-    @staticmethod
-    async def copy(
-        src_buf: bytearray,
-        dst_buf: bytearray,
-    ) -> None:
-        dma = DmaUtil.setup_copy(src_buf, dst_buf)
-        dma.active(True)
-        while dma.active():
-            await uasyncio.sleep_ms(1)
-        dma.close()
-
-
 class Mapping:
     # (2048byte * 64page) / 512byte = 256 [LBA/LBG]
     LBA_PER_LBG = (
@@ -365,12 +363,14 @@ class FlashTranslationLayer:
         nandio: NandIo,
         nandcmd: FwNandCommander | PioNandCommander,
         config: FtlConfig | None = None,
+        over_provision_ratio: float = 0.1,
     ) -> None:
         #########################################
         # Set by External
         self.nandio = nandio
         self.nandcmd = nandcmd
         self.config = config if config is not None else FtlConfig()
+        self.over_provision_ratio = over_provision_ratio
 
         #########################################
         # Internal Components
@@ -382,9 +382,9 @@ class FlashTranslationLayer:
         # 現在処理中のLBG
         self._write_lbg: LBG | None = None
         # １NAND Block分のwrite_buffers[page]
-        self._write_buffers: list[bytearray] = [
-            bytearray(NandConfig.PAGE_USABLE_BYTES)
-        ] * NandConfig.PAGES_PER_BLOCK
+        self._write_buffers: list[bytearray] = list()
+        for _ in range(NandConfig.PAGES_PER_BLOCK):
+            self._write_buffers.append(bytearray(NandConfig.PAGE_USABLE_BYTES))
         # 変更したらTrue
         self._is_write_dirty: bool = False
 
@@ -448,7 +448,7 @@ class FlashTranslationLayer:
                 dst_buf = memoryview(self._write_buffers[page_index])[
                     byte_offset : byte_offset + NandConfig.SECTOR_BYTES
                 ]
-                await DmaUtil.copy(src_buf=src_buf, dst_buf=dst_buf)  # type: ignore (memoryview is not bytearray)
+                dst_buf[: len(src_buf)] = src_buf
         # LBGをセット
         self._write_lbg = lbg
         self._is_write_dirty = False
@@ -474,14 +474,19 @@ class FlashTranslationLayer:
         # 転送先決定
         page_in_block, sector_in_page = self._sector_offset_to_write_buffer_pos(lba)
         byte_offset = sector_in_page * NandConfig.SECTOR_BYTES
-        dst_buf = memoryview(self._write_buffers[page_in_block])[
-            byte_offset : byte_offset + NandConfig.SECTOR_BYTES
-        ]
+        print(
+            f"Update writebuffer[{page_in_block}][{byte_offset}: {byte_offset + NandConfig.SECTOR_BYTES}] = {src_data[0]: 02x}"
+        )
         # 書き込みバッファにデータを転送
-        await DmaUtil.copy(src_buf=src_data, dst_buf=dst_buf)  # type: ignore (memoryview is not bytearray)
+        self._write_buffers[page_in_block][
+            byte_offset : byte_offset + NandConfig.SECTOR_BYTES
+        ] = src_data[: NandConfig.SECTOR_BYTES]
         # 変更したことを覚えておく
         self._write_lbg = lbg
         self._is_write_dirty = True
+        print(
+            f"Write: LBA {lba}, LBG {lbg}, Page {page_in_block}, Sector {sector_in_page}, Data0: {src_data[0]: 02x}"
+        )
 
     async def flush(self) -> None:
         """書き込みバッファをNAND Flashに書き込む"""
@@ -508,10 +513,14 @@ class FlashTranslationLayer:
             src_buf = memoryview(self._write_buffers[page_in_block])[
                 byte_offset : byte_offset + NandConfig.SECTOR_BYTES
             ]
+            print(
+                f"refer writebuffer[{page_in_block}][{byte_offset}: {byte_offset + NandConfig.SECTOR_BYTES}] = {src_buf[0]: 02x}"
+            )
             return bytearray(src_buf)
 
         # Mappingがない -> 空データ
         if chip is None or block is None:
+            print("No Mapping found, returning empty data")
             return bytearray(NandConfig.SECTOR_BYTES)
 
         # Mappingがある -> NAND Flashから読み出し
@@ -526,8 +535,9 @@ class FlashTranslationLayer:
         # Read Error
         if read_sector_data is None:
             raise ValueError(
-                f"Read Error: Chip {chip}, Block {block}, Page {page_in_block} sector {sector_in_page} data: {read_sector_data}"
+                f"Read Error: Chip {chip}, Block {block}, Page {page_in_block} sector {sector_in_page} data0: {read_sector_data}"
             )
+        print(f"Read from NAND: {read_sector_data[0]: 02x}")
         return read_sector_data
 
     async def init_config(self) -> None:
@@ -548,3 +558,14 @@ class FlashTranslationLayer:
         self._blockmng.load_config(self.config)
         self._mapping.load_config(self.config)
         return True
+
+    def report_capacity_lb(self) -> int:
+        """FTLの容量を返す"""
+        # 搭載された全部の容量
+        total_capacity = self._blockmng.num_total_capacity()
+        # max:1024/min:1004blockであることや後のエラーで減ることを想定して設定
+        spare_capacity = int(total_capacity * self.over_provision_ratio)
+        # total-spareで使える範囲. USB MSC等で公開する容量
+        usable_capacity = total_capacity - spare_capacity
+
+        return usable_capacity // NandConfig.SECTOR_BYTES
