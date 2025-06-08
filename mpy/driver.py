@@ -910,16 +910,13 @@ class PioNandCommander:
         )
         rx_dma0.active(1)
 
-        await self._wait_for_dma(
-            rx_dma0,
-            lambda: print(
-                f"tx_dma0.active(): {tx_dma0.active()}, tx_dma1.active(): {tx_dma1.active()}, tx_dma2.active(): {tx_dma2.active()}, rx_dma0.active(): {rx_dma0.active()}"
-            ),
-        )
+        await self._wait_for_dma(rx_dma0)
 
         # finalize
         sm0.active(0)
         tx_dma0.close()
+        tx_dma1.close()
+        tx_dma2.close()
         rx_dma0.close()
 
         is_ok = (rx_data[0] & NandStatus.PROGRAM_ERASE_FAIL) == 0
