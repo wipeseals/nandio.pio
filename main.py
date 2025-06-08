@@ -1,3 +1,4 @@
+from sim.nandio_pio import NandConfig
 import uasyncio
 
 from mpy.driver import NandIo, PioNandCommander
@@ -15,8 +16,8 @@ async def main() -> None:
         print(f"Failed to load config: {e}")
         await ftl.init_config()
 
-    def create_test_data(lba: int) -> bytearray:
-        return bytearray([lba & 0xFF] * 512)
+    def create_test_data(lba: int, length: int = NandConfig.SECTOR_BYTES) -> bytearray:
+        return bytearray([(x + lba) & 0xFF for x in range(length)])
 
     print("Writing and reading logical blocks...")
     await ftl.write_logical(0, create_test_data(0))
@@ -34,7 +35,7 @@ async def main() -> None:
     assert await ftl.read_logical(1) == create_test_data(1)
 
     # ftl.save_config()
-    # print(f"Config saved successfully. {ftl.config._data}")
+    print(f"config: {ftl.config._data}")
 
 
 if __name__ == "__main__":
