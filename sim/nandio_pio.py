@@ -38,21 +38,14 @@ class NandConfig:
     PAGES_PER_BLOCK = 64
     # number of blocks per CS
     BLOCKS_PER_CS = 1024
+    # block bytes
+    BLOCK_BYTES = PAGE_ALL_BYTES * PAGES_PER_BLOCK
+    # block usable bytes
+    BLOCK_USABLE_BYTES = PAGE_USABLE_BYTES * PAGES_PER_BLOCK
     # sector size
     SECTOR_BYTES = 512
     # number of sectors per page (2048byte / 512byte = 4)
     SECTOR_PER_PAGE = PAGE_USABLE_BYTES // SECTOR_BYTES
-
-    # sector bits (log2(4) = 2)
-    SECTOR_BITS = math.ceil(math.log2(SECTOR_PER_PAGE))
-    # page bits (log2(64) = 6)
-    PAGE_BITS = math.ceil(math.log2(PAGES_PER_BLOCK))
-    # block bits (log2(1024) = 10)
-    BLOCK_BITS = math.ceil(math.log2(BLOCKS_PER_CS))
-    # cs bits (log2(2) = 1)
-    CS_BITS = math.ceil(math.log2(MAX_CS))
-    # total bits
-    TOTAL_BITS = SECTOR_BITS + PAGE_BITS + BLOCK_BITS + CS_BITS
 
 
 class NandCommandId:
