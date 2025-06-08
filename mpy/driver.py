@@ -823,52 +823,58 @@ class PioNandCommander:
         data: bytearray,
         col: int = 0,
     ) -> bool:
+        """
+        Page Program using PIO and DMA.
+        `page_program_simple()` と比較し、書き込みデータのbit orやPayloadへの統合を改良し、更にCPUの負荷を軽減した高速版
+
+        Overview:
+        - Program Page の Data Body を Payload中に組み込まず、 Descriptorを分割して転送
+        - 転送データへのCS bitorをPIO + DMAで実行
+        - Payload作成のDMA転送の裏で残りのPayloadを作成
+        """
         sm0 = self._setup_pio0_nandio()
         sm0.active(1)
 
-        tx_payload0 = array.array("I")
-        tx_payload1 = array.array("I")
-        tx_payload2 = array.array("I")
-        PioCmdBuilder.init_pin(tx_payload0)
-        PioCmdBuilder.assert_cs(tx_payload0, cs=chip_index)
-        PioCmdBuilder.cmd_latch(
-            tx_payload0, cmd=NandCommandId.PROGRAM_1ST, cs=chip_index
+        async def _create_payload0() -> array.array:
+            tx_payload0 = array.array("I")
+            PioCmdBuilder.init_pin(tx_payload0)
+            PioCmdBuilder.assert_cs(tx_payload0, cs=chip_index)
+            PioCmdBuilder.cmd_latch(
+                tx_payload0, cmd=NandCommandId.PROGRAM_1ST, cs=chip_index
+            )
+            PioCmdBuilder.full_addr_latch(
+                tx_payload0,
+                column_addr=col,
+                page_addr=page,
+                block_addr=block,
+                cs=chip_index,
+            )
+            PioCmdBuilder.data_input_only_header(tx_payload0, len(data))
+            return tx_payload0
+
+        async def _create_payload1() -> array.array:
+            tx_payload1 = await self._bitor_cs(chip_index, data)
+            return tx_payload1
+
+        async def _create_payload2() -> array.array:
+            tx_payload2 = array.array("I")
+            PioCmdBuilder.cmd_latch(
+                tx_payload2, cmd=NandCommandId.PROGRAM_2ND, cs=chip_index
+            )
+            PioCmdBuilder.wait_rbb(tx_payload2)
+            PioCmdBuilder.cmd_latch(
+                tx_payload2, cmd=NandCommandId.STATUS_READ, cs=chip_index
+            )
+            PioCmdBuilder.data_output(tx_payload2, data_count=1)
+            PioCmdBuilder.deassert_cs(tx_payload2)
+            return tx_payload2
+
+        # CS ORを行っている裏で残りのPayloadを作成する
+        tx_payload0, tx_payload1, tx_payload2 = await uasyncio.gather(
+            _create_payload0(),
+            _create_payload1(),
+            _create_payload2(),
         )
-        PioCmdBuilder.full_addr_latch(
-            tx_payload0,
-            column_addr=col,
-            page_addr=page,
-            block_addr=block,
-            cs=chip_index,
-        )
-        # 00: Original
-        # PioCmdBuilder.data_input(tx_payload0, data=data_extend, cs=chip_index)
-
-        # 01: Prepared
-        # PioCmdBuilder.data_input_only_header(tx_payload0, len(data))
-        # Util.apply_cs_to_data_array(data_extend, cs=chip_index)
-        # tx_payload0.extend(data_extend)  # Append data to the payload
-
-        # 02: BitOR CSをPIO版
-        # PioCmdBuilder.data_input_only_header(tx_payload0, len(data))
-        # data_extend = await self._bitor_cs(chip_index, data)
-        # tx_payload0.extend(data_extend)  # Append data to the payload
-
-        # 03: Descriptor分割版
-        PioCmdBuilder.data_input_only_header(tx_payload0, len(data))
-
-        data_extend = await self._bitor_cs(chip_index, data)
-        tx_payload1.extend(data_extend)  # Append data to the payload
-
-        PioCmdBuilder.cmd_latch(
-            tx_payload2, cmd=NandCommandId.PROGRAM_2ND, cs=chip_index
-        )
-        PioCmdBuilder.wait_rbb(tx_payload2)
-        PioCmdBuilder.cmd_latch(
-            tx_payload2, cmd=NandCommandId.STATUS_READ, cs=chip_index
-        )
-        PioCmdBuilder.data_output(tx_payload2, data_count=1)
-        PioCmdBuilder.deassert_cs(tx_payload2)
 
         # TX PayloadのChain用に事前確保
         tx_dma0 = rp2.DMA()
