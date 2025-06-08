@@ -172,13 +172,18 @@ class NandBlockManager:
         self._mark_free(chip_index=chip_index, block=block)
 
     async def read(
-        self, chip_index: CHIP, block: BLOCK, page: PAGE
+        self,
+        chip_index: CHIP,
+        block: BLOCK,
+        page: PAGE,
+        num_bytes: int = NandConfig.PAGE_USABLE_BYTES,
+        col: int = 0,
     ) -> bytearray | None:
         """指定されたページを読み出す"""
         print(f"Read: Chip {chip_index}, Block {block}, Page {page}")
 
         return await self._nandcmd.read_page(
-            chip_index=chip_index, block=block, page=page
+            chip_index=chip_index, block=block, page=page, num_bytes=num_bytes, col=col
         )
 
     async def program(
@@ -476,6 +481,7 @@ class FlashTranslationLayer:
         # 書き込みバッファにデータを転送
         await DmaUtil.copy(src_buf=src_data, dst_buf=dst_buf)  # type: ignore (memoryview is not bytearray)
         # 変更したことを覚えておく
+        self._write_lbg = lbg
         self._is_write_dirty = True
 
     async def flush(self) -> None:
@@ -490,6 +496,9 @@ class FlashTranslationLayer:
         lbg, _ = Mapping.lba_to_lbg(lba)
         # Mapping を確認
         chip, block = self._mapping.resolve(lbg)
+        print(
+            f"Read: LBA {lba}, LBG {lbg}, Chip {chip}, Block {block}, Page {page_in_block}, Sector {sector_in_page}"
+        )
 
         # 現在のLBG上にある -> 書き込みバッファから読み出し
         if self._write_lbg == lbg:
@@ -505,8 +514,13 @@ class FlashTranslationLayer:
             return bytearray(NandConfig.SECTOR_BYTES)
 
         # Mappingがある -> NAND Flashから読み出し
+        start_index = sector_in_page * NandConfig.SECTOR_BYTES
         read_page_data = await self._blockmng.read(
-            chip_index=chip, block=block, page=page_in_block
+            chip_index=chip,
+            block=block,
+            page=page_in_block,
+            col=start_index,
+            num_bytes=NandConfig.SECTOR_BYTES,
         )
         # Read Error
         if read_page_data is None:
@@ -514,7 +528,6 @@ class FlashTranslationLayer:
                 f"Read Error: Chip {chip}, Block {block}, Page {page_in_block} data: {read_page_data}"
             )
         # 読み出しデータからSectorを抽出
-        start_index = sector_in_page * NandConfig.SECTOR_BYTES
         end_index = start_index + NandConfig.SECTOR_BYTES
         sector_data = read_page_data[start_index:end_index]
         return sector_data
