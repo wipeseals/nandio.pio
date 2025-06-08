@@ -9,54 +9,8 @@ class NandBlockManager:
         nandcmd: FwNandCommander | PioNandCommander,
     ) -> None:
         self._nandcmd = nandcmd
-
-    async def init(
-        self,
-        is_initial: bool = False,
-        num_chip: CHIP = NandConfig.MAX_CS,
-        initial_badblock_bitmaps: list[int] | None = None,
-    ) -> None:
-        if not is_initial:
-            try:
-                self._load()
-            except OSError as _:
-                is_initial = True
-
-        if is_initial:
-            self.num_chip: CHIP = num_chip
-            self.badblock_bitmaps = (
-                initial_badblock_bitmaps if initial_badblock_bitmaps else []
-            )
-            await self._setup()
-            # save initialized values
-            await self._save()
-
-    async def _save(self, filepath: str = "nand_block_allocator.json") -> None:
-        json_str = json.dumps(
-            {
-                "num_chip": self.num_chip,
-                "badblock_bitmaps": self.badblock_bitmaps,
-                "allocated_bitmaps": self.allocated_bitmaps,
-            }
-        )
-        try:
-            f = open(filepath, "w")
-            f.write(json_str)
-            f.close()
-        except OSError as e:
-            raise e
-
-    def _load(self, filepath: str = "nand_block_allocator.json") -> None:
-        try:
-            f = open(filepath, "r")
-            json_text = f.read()
-            data = json.loads(json_text)
-            self.num_chip = data["num_chip"]
-            self.badblock_bitmaps = data["badblock_bitmaps"]
-            self.allocated_bitmaps = data["allocated_bitmaps"]
-            f.close()
-        except OSError as e:
-            raise e
+        self.num_chip: int = 0
+        self.badblock_bitmaps: list[int] = []
 
     ########################################################
     # Wrapper functions
@@ -77,7 +31,7 @@ class NandBlockManager:
 
     async def _check_allbadblocks(
         self, chip_index: CHIP, num_blocks: int = NandConfig.BLOCKS_PER_CS
-    ) -> int | None:
+    ) -> int:
         badblock_bitmap = 0
         for block in range(num_blocks):
             data = await self._nandcmd.read_page(
@@ -85,45 +39,38 @@ class NandBlockManager:
             )
             # Read Exception
             if data is None:
-                return None
+                raise ValueError(
+                    f"Read Error: Chip {chip_index}, Block {block}, Page 0"
+                )
             # Check Bad Block
             is_bad = data[0] != 0xFF
             if is_bad:
                 badblock_bitmap |= 1 << block
         return badblock_bitmap
 
-    ########################################################
-    # Application functions
-    ########################################################
-    async def _setup(self) -> None:
-        # cs
+    async def setup(self) -> None:
+        """NAND Flashの初期化"""
         if self.num_chip == 0:
             self.num_chip = await self._check_chip_num()
         if self.num_chip == 0:
             raise ValueError("No Active CS")
 
         # badblock
-        if self.badblock_bitmaps is None:
-            self.badblock_bitmaps = []
+        # Read Pageを投げて、BadBlockをチェック
+        self.badblock_bitmaps = []
         for chip_index in range(self.num_chip):
-            # 片方のCSだけ初期値未設定ケースがあるので追加してからチェックした値をセット
-            if chip_index < len(self.badblock_bitmaps):
-                # 既に設定済
-                pass
-            else:
-                self.badblock_bitmaps.append(0)
-                bitmaps = await self._check_allbadblocks(chip_index=chip_index)
-                if bitmaps is None:
-                    raise ValueError("BadBlock Check Error")
-                else:
-                    self.badblock_bitmaps[chip_index] = bitmaps
+            self.badblock_bitmaps.append(0)
+            bitmaps = await self._check_allbadblocks(chip_index=chip_index)
+            self.badblock_bitmaps[chip_index] = bitmaps
+
         # allocated bitmap
-        self.allocated_bitmaps = [0] * self.num_chip
         # badblock部分は確保済としてマーク
+        self.allocated_bitmaps = [0] * self.num_chip
         for chip_index in range(self.num_chip):
             self.allocated_bitmaps[chip_index] = self.badblock_bitmaps[chip_index]
 
     def _pick_free(self) -> tuple[CHIP | None, BLOCK | None]:
+        """空きBlockを探す"""
         # 先頭から空きを探す
         for chip_index in range(self.num_chip):
             for block in range(NandConfig.BLOCKS_PER_CS):
@@ -135,21 +82,25 @@ class NandBlockManager:
         return None, None
 
     def _mark_alloc(self, chip_index: CHIP, block: BLOCK) -> None:
+        """Blockを確保済としてマーク"""
         if (self.allocated_bitmaps[chip_index] & (1 << block)) != 0:
             raise ValueError("Block Already Allocated")
 
         self.allocated_bitmaps[chip_index] |= 1 << block
 
     def _mark_free(self, chip_index: CHIP, block: BLOCK) -> None:
+        """Blockを解放済としてマーク"""
         if (self.allocated_bitmaps[chip_index] & (1 << block)) == 0:
             raise ValueError("Block Already Free")
 
         self.allocated_bitmaps[chip_index] &= ~(1 << block)
 
     def _mark_bad(self, chip_index: CHIP, block: BLOCK) -> None:
+        """BlockをBadBlockとしてマーク"""
         self.badblock_bitmaps[chip_index] |= 1 << block
 
     async def alloc(self) -> tuple[CHIP, BLOCK]:
+        """空きBlockを確保"""
         while True:
             cs, block = self._pick_free()
             if block is None or cs is None:
@@ -167,11 +118,13 @@ class NandBlockManager:
                     self._mark_bad(chip_index=cs, block=block)
 
     async def free(self, chip_index: CHIP, block: BLOCK) -> None:
+        """Blockを解放"""
         self._mark_free(chip_index=chip_index, block=block)
 
     async def read(
         self, chip_index: CHIP, block: BLOCK, page: PAGE
     ) -> bytearray | None:
+        """指定されたページを読み出す"""
         return await self._nandcmd.read_page(
             chip_index=chip_index, block=block, page=page
         )
@@ -179,6 +132,7 @@ class NandBlockManager:
     async def program(
         self, chip_index: CHIP, block: BLOCK, page: PAGE, data: bytearray
     ) -> bool:
+        """指定されたページにデータを書き込む"""
         return await self._nandcmd.program_page(
             chip_index=chip_index, block=block, page=page, data=data
         )
@@ -297,11 +251,8 @@ class FlashTranslationLayer:
         self.current_write_page: int | None = None
         self.current_write_sector: int | None = None
 
-    async def init(
-        self,
-        is_initial: bool,
-    ) -> None:
-        await self.blockmng.init(is_initial=is_initial)
+    async def setup(self) -> None:
+        await self.blockmng.setup()
 
     ########################################################
     # Physical Address Read
