@@ -486,6 +486,8 @@ class FlashTranslationLayer:
     async def flush(self) -> None:
         """書き込みバッファをNAND Flashに書き込む"""
         await self._store_write_buffer()
+        # Mappingを保存
+        self.save_config()
 
     async def read_logical(self, lba: LBA) -> bytearray:
         """指定されたLBAのデータを読み出す"""
@@ -514,7 +516,7 @@ class FlashTranslationLayer:
 
         # Mappingがある -> NAND Flashから読み出し
         start_index = sector_in_page * NandConfig.SECTOR_BYTES
-        read_page_data = await self._blockmng.read(
+        read_sector_data = await self._blockmng.read(
             chip_index=chip,
             block=block,
             page=page_in_block,
@@ -522,14 +524,11 @@ class FlashTranslationLayer:
             num_bytes=NandConfig.SECTOR_BYTES,
         )
         # Read Error
-        if read_page_data is None:
+        if read_sector_data is None:
             raise ValueError(
-                f"Read Error: Chip {chip}, Block {block}, Page {page_in_block} data: {read_page_data}"
+                f"Read Error: Chip {chip}, Block {block}, Page {page_in_block} sector {sector_in_page} data: {read_sector_data}"
             )
-        # 読み出しデータからSectorを抽出
-        end_index = start_index + NandConfig.SECTOR_BYTES
-        sector_data = read_page_data[start_index:end_index]
-        return sector_data
+        return read_sector_data
 
     async def init_config(self) -> None:
         """FTLの初期化 (初めて起動したときの設定)"""
