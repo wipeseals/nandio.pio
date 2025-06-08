@@ -249,6 +249,45 @@ class PageCodec:
         return data[: NandConfig.PAGE_USABLE_BYTES]  # Parity除去
 
 
+# Logical Block Address Group
+LBG = int
+
+
+class Mapping:
+    # (2048byte * 64page) / 512byte = 256 [LBA/LBG]
+    LBA_PER_LBG = (
+        NandConfig.PAGE_USABLE_BYTES * NandConfig.PAGES_PER_BLOCK
+    ) // NandConfig.SECTOR_BYTES
+
+    @staticmethod
+    def lba_to_lbg(lba: LBA) -> LBG:
+        """Convert Logical Block Address to Logical Block Group"""
+        return lba // Mapping.LBA_PER_LBG
+
+    @staticmethod
+    def lbg_to_lba(lbg: LBG, offset_lba: LBA = 0) -> LBA:
+        """Convert Logical Block Group to Logical Block Address"""
+        return lbg * Mapping.LBA_PER_LBG + offset_lba
+
+    def __init__(self) -> None:
+        # Mapping from Logical Block Group (LBG) to NAND Block (Chip, Block)
+        self._mapping: dict[LBG, tuple[CHIP, BLOCK]] = {}
+
+    async def init_config(self) -> None:
+        """Initialize the mapping configuration"""
+        self._mapping.clear()
+
+    def save_config(self, config: FtlConfig) -> bool:
+        """Save the mapping configuration to FTL config"""
+        config.set("mapping", self._mapping, save=False)
+        return True
+
+    def load_config(self, config: FtlConfig) -> bool:
+        """Load the mapping configuration from FTL config"""
+        self._mapping = config.get("mapping", {})
+        return True
+
+
 class FlashTranslationLayer:
     """
     Flash Translation Layer class
@@ -285,22 +324,25 @@ class FlashTranslationLayer:
         nandcmd: FwNandCommander | PioNandCommander,
         config: FtlConfig | None = None,
     ) -> None:
-        # NAND IO Drivers/Commander
+        # NAND IO Drivers/Commander, Config
         self.nandio = nandio
         self.nandcmd = nandcmd
-        # Configuration
         self.config = config if config is not None else FtlConfig()
 
         # NAND Block Manager
         self._blockmng = NandBlockManager(nandcmd=self.nandcmd)
+        # Mapping
+        self._mapping = Mapping()
 
     async def init_config(self) -> None:
         """FTLの初期化 (初めて起動したときの設定)"""
         await self._blockmng.init_config()
+        await self._mapping.init_config()
 
     def save_config(self) -> bool:
         """FTLの設定を反映して保存"""
         self._blockmng.save_config(self.config)
+        self._mapping.save_config(self.config)
         return self.config.save()
 
     def load_config(self) -> bool:
@@ -308,4 +350,5 @@ class FlashTranslationLayer:
         if not self.config.load():
             return False
         self._blockmng.load_config(self.config)
+        self._mapping.load_config(self.config)
         return True
