@@ -418,8 +418,6 @@ class FlashTranslationLayer:
         # Clear Write Buffers
         self._write_lbg = None
         self._is_write_dirty = False
-        for buf in self._write_buffers:
-            buf.clear()
 
     async def _load_write_buffer(self, lbg: LBG) -> None:
         """LBGに対応する書き込みバッファをNAND Flashから読み込み、Write Buffersをセットする"""
