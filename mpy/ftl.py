@@ -175,6 +175,8 @@ class NandBlockManager:
         self, chip_index: CHIP, block: BLOCK, page: PAGE
     ) -> bytearray | None:
         """指定されたページを読み出す"""
+        print(f"Read: Chip {chip_index}, Block {block}, Page {page}")
+
         return await self._nandcmd.read_page(
             chip_index=chip_index, block=block, page=page
         )
@@ -183,6 +185,9 @@ class NandBlockManager:
         self, chip_index: CHIP, block: BLOCK, page: PAGE, data: bytearray
     ) -> bool:
         """指定されたページにデータを書き込む"""
+        print(
+            f"Program: Chip {chip_index}, Block {block}, Page {page}, Data Length: {len(data)}"
+        )
         return await self._nandcmd.program_page(
             chip_index=chip_index, block=block, page=page, data=data
         )
@@ -279,7 +284,7 @@ class DmaUtil:
     ) -> None:
         dma = DmaUtil.setup_copy(src_buf, dst_buf)
         dma.active(True)
-        while not dma.active():
+        while dma.active():
             await uasyncio.sleep_ms(1)
 
 
@@ -372,7 +377,7 @@ class FlashTranslationLayer:
         self._write_lbg: LBG | None = None
         # １NAND Block分のwrite_buffers[page]
         self._write_buffers: list[bytearray] = [
-            bytearray(NandConfig.SECTOR_BYTES) * NandConfig.SECTOR_PER_PAGE
+            bytearray(NandConfig.PAGE_USABLE_BYTES)
         ] * NandConfig.PAGES_PER_BLOCK
         # 変更したらTrue
         self._is_write_dirty: bool = False
