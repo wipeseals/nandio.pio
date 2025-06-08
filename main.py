@@ -1,7 +1,7 @@
 from sim.nandio_pio import NandConfig
 import uasyncio
 
-from mpy.driver import NandIo, PioNandCommander
+from mpy.driver import FwNandCommander, NandIo, PioNandCommander
 from mpy.ftl import FlashTranslationLayer
 
 
@@ -31,9 +31,27 @@ async def test_seq_wr(ftl: FlashTranslationLayer, num_lb: int | None = None) -> 
     print("Data verification successful.")
 
 
+async def test_sample(ftl: FlashTranslationLayer) -> None:
+    print("Writing and reading logical blocks...")
+    await ftl.write_logical(0, create_test_data(0))
+    await ftl.write_logical(1, create_test_data(1))
+
+    print("Reading back logical blocks...")
+    assert await ftl.read_logical(0) == create_test_data(0)
+    assert await ftl.read_logical(1) == create_test_data(1)
+
+    print("Flushing changes to NAND...")
+    await ftl.flush()
+
+    print("Reading back logical blocks after flush...")
+    assert await ftl.read_logical(0) == create_test_data(0)
+    assert await ftl.read_logical(1) == create_test_data(1)
+
+
 async def main() -> None:
     nandio = NandIo(keep_wp=False)
-    commander = PioNandCommander(nandio)
+    # commander = PioNandCommander(nandio)
+    commander = FwNandCommander(nandio)
     ftl = FlashTranslationLayer(nandio, commander)
     try:
         ftl.load_config()
@@ -42,7 +60,8 @@ async def main() -> None:
         print(f"Failed to load config: {e}")
         await ftl.init_config()
 
-    await test_seq_wr(ftl, num_lb=ftl.report_capacity_lb())
+    await test_sample(ftl)
+    # await test_seq_wr(ftl, num_lb=ftl.report_capacity_lb())
 
     # ftl.save_config()
     ftl.save_config()
