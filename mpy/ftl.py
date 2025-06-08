@@ -3,6 +3,36 @@ from mpy.driver import NandIo, FwNandCommander, PioNandCommander
 from sim.nandio_pio import BLOCK, CHIP, LBA, PAGE, PBA, NandConfig
 
 
+class FtlConfig:
+    """FTL Configuration"""
+
+    def __init__(self, filepath: str = "ftl.json") -> None:
+        self._filepath = filepath
+        self._data = dict()
+
+    def load(self) -> bool:
+        f = open(self._filepath, "r")
+        json_text = f.read()
+        self._data = json.loads(json_text)
+        f.close()
+        return True
+
+    def save(self) -> bool:
+        json_str = json.dumps(self._data)
+        f = open(self._filepath, "w")
+        f.write(json_str)
+        f.close()
+        return True
+
+    def get(self, key: str, default=None) -> any:
+        return self._data.get(key, default)
+
+    def set(self, key: str, value, save: bool = False) -> None:
+        self._data[key] = value
+        if save:
+            self.save()
+
+
 class NandBlockManager:
     def __init__(
         self,
@@ -48,7 +78,7 @@ class NandBlockManager:
                 badblock_bitmap |= 1 << block
         return badblock_bitmap
 
-    async def setup(self) -> None:
+    async def init_config(self) -> None:
         """NAND Flashの初期化"""
         if self.num_chip == 0:
             self.num_chip = await self._check_chip_num()
@@ -69,9 +99,24 @@ class NandBlockManager:
         for chip_index in range(self.num_chip):
             self.allocated_bitmaps[chip_index] = self.badblock_bitmaps[chip_index]
 
+    def load_config(self, config: FtlConfig) -> bool:
+        """Load FTL Configuration"""
+        self.num_chip = config.get("num_chip", 0)
+        self.badblock_bitmaps = config.get("badblock_bitmaps", [])
+        self.allocated_bitmaps = config.get("allocated_bitmaps", [])
+        return True
+
+    def save_config(self, config: FtlConfig) -> bool:
+        """Save FTL Configuration"""
+        config.set("num_chip", self.num_chip, save=False)
+        config.set("badblock_bitmaps", self.badblock_bitmaps, save=False)
+        config.set("allocated_bitmaps", self.allocated_bitmaps, save=False)
+        return True
+
     def _pick_free(self) -> tuple[CHIP | None, BLOCK | None]:
         """空きBlockを探す"""
         # 先頭から空きを探す
+        # TODO: Wear Levelingを考慮して、ランダムに選ぶようにする
         for chip_index in range(self.num_chip):
             for block in range(NandConfig.BLOCKS_PER_CS):
                 # free & not badblock
@@ -204,58 +249,35 @@ class PageCodec:
         return data[: NandConfig.PAGE_USABLE_BYTES]  # Parity除去
 
 
-class Mapping:
-    """LBAとPBAのマッピングを管理するクラス"""
-
-    def __init__(self) -> None:
-        self.l2p: dict[LBA, PBA] = dict()
-
-    def resolve(self, lba: LBA) -> PBA | None:
-        """LBA -> PBAの変換"""
-        pba = self.l2p.get(lba)
-        return pba
-
-    def update(self, lba: LBA, pba: PBA) -> None:
-        """LBA -> PBAの割当更新"""
-        self.l2p[lba] = pba
-
-    def unmap(self, lba: LBA) -> None:
-        """LBAのマッピング削除"""
-        self.l2p.pop(lba, None)
-
-
-class FtlConfig:
-    """FTL Configuration"""
-
-    def __init__(self, filepath: str = "ftl.json") -> None:
-        self._filepath = filepath
-        self._data = dict()
-
-    def load(self) -> bool:
-        f = open(self._filepath, "r")
-        json_text = f.read()
-        self._data = json.loads(json_text)
-        f.close()
-        return True
-
-    def save(self) -> bool:
-        json_str = json.dumps(self._data)
-        f = open(self._filepath, "w")
-        f.write(json_str)
-        f.close()
-        return True
-
-    def get(self, key: str, default=None) -> any:
-        return self._data.get(key, default)
-
-    def set(self, key: str, value, save: bool = False) -> None:
-        self._data[key] = value
-        if save:
-            self.save()
-
-
 class FlashTranslationLayer:
-    """Flash Translation Layer (FTL)"""
+    """
+    Flash Translation Layer class
+
+    前提
+    - NAND Page Size: 2048 byte
+    - NAND Block Size: 128 KiB (64page * 2048 byte)
+    - Maximum Chip Size: 128 MiB (1024 Block * 128 KiB)
+    - Maximum Size: 256 MiB (2 Chip * 128 MiB)
+    - LBA (Logical Block Address):  512 byte
+    - SRAM Size: 264 KiB (RP2040のSRAMサイズ)
+
+    実装案
+    - NAND Page単位マッピング: 柔軟だが、マッピングテーブルが大きくなる
+    - NAND Block単位マッピング: マッピングテーブルが小さくなるが、柔軟性が低い (採用)
+
+    方式
+    - 128 KiB / 512 byte = 256 LBA を 1 Logical Block Group (LBGと呼ぶことにする) 単位で管理
+    - 必要なマッピングテーブルは、 Max Size / LBG Size = 256 MiB / 128 KiB = 2048 LBG = 4 KiB
+        - 2byte (2048blockなので11bitあればよい) / LBG = 4096 byte = 4 KiB
+    - SRAM上に 1 LBG 分の Buffer を持ち、そこに書き込みを行う
+    - Write
+        - LBG 範囲内のアクセスは SRAM上のBufferに書き込み
+        - LBG 範囲外のアクセスもしくはデータ確定が必要な場合、 NAND Flashに書き込み
+    - Read
+        - LBG 範囲内のアクセスは SRAM上のBufferから読み出し
+        - LBG 範囲外のアクセスは NAND Flashから読み出し
+            - 読み出しは Page単位で行う
+    """
 
     def __init__(
         self,
@@ -271,185 +293,19 @@ class FlashTranslationLayer:
 
         # NAND Block Manager
         self._blockmng = NandBlockManager(nandcmd=self.nandcmd)
-        # NAND Page Codec
-        self._codec = PageCodec()
-        # LBA -> PBAのマッピング
-        self._mapping = Mapping()
 
-        # Write Buffer (WriteはEncode都合でpage単位で行うため、複数sector束ねる用)
-        self.write_buffer: bytearray = bytearray([0x0] * NandConfig.PAGE_USABLE_BYTES)
-        # write buffer 上にあるLBA (有効なsector数を求める目的と、Write Buffer城のデータを返却するケースで使用)
-        self.write_buffer_lbas: list[LBA] = list()
-        # 現在の書き込み進捗
-        self.current_write_chip: int | None = None
-        self.current_write_block: int | None = None
-        self.current_write_page: int | None = None
-        self.current_write_sector: int | None = None
-
-    async def setup_initial(self) -> None:
+    async def init_config(self) -> None:
         """FTLの初期化 (初めて起動したときの設定)"""
-        await self._blockmng.setup()
+        await self._blockmng.init_config()
 
     def save_config(self) -> bool:
         """FTLの設定を反映して保存"""
-        self.config.set("num_chip", self._blockmng.num_chip)
-        self.config.set("badblock_bitmaps", self._blockmng.badblock_bitmaps)
-        self.config.set("allocated_bitmaps", self._blockmng.allocated_bitmaps)
+        self._blockmng.save_config(self.config)
         return self.config.save()
 
     def load_config(self) -> bool:
         """FTLの設定を読み込み"""
         if not self.config.load():
             return False
-        # 設定を反映
-        self._blockmng.num_chip = self.config.get("num_chip", 0)
-        self._blockmng.badblock_bitmaps = self.config.get(
-            "badblock_bitmaps", [0] * NandConfig.MAX_CS
-        )
-        self._blockmng.allocated_bitmaps = self.config.get(
-            "allocated_bitmaps", [0] * NandConfig.MAX_CS
-        )
+        self._blockmng.load_config(self.config)
         return True
-
-    ########################################################
-    # Physical Address Read
-    ########################################################
-
-    async def read_page(
-        self, chip_index: int, block: int, page: int
-    ) -> bytearray | None:
-        """指定されたページをすべて読み出し"""
-        # データを読み込む
-        page_data = await self._blockmng.read(chip_index, block, page)
-        if page_data is None:
-            return None
-        # データをデコード
-        decode_page_data = self._codec.decode(page_data)
-        if decode_page_data is None:
-            return None
-        return decode_page_data
-
-    async def read_sector(
-        self, chip_index: int, block: int, page: int, sector: int
-    ) -> bytearray | None:
-        """指定されたページのセクタを読み出し"""
-        # データを読み込む
-        page_data = await self.read_page(chip_index, block, page)
-        if page_data is None:
-            return None
-        # ほしいSectorを取得
-        sector_data = page_data[
-            sector * NandConfig.SECTOR_BYTES : (sector + 1) * NandConfig.SECTOR_BYTES
-        ]
-        return sector_data
-
-    ########################################################
-    # Physical Address Write
-    ########################################################
-
-    async def write_page(
-        self, chip_index: int, block: int, page: int, data: bytearray
-    ) -> bool:
-        """指定されたページを書き込む"""
-        # データをエンコード
-        encode_page_data = self._codec.encode(data)
-        if encode_page_data is None:
-            return False
-        # データを書き込む
-        result = await self._blockmng.program(chip_index, block, page, encode_page_data)
-        if not result:
-            return False
-        return True
-
-    ########################################################
-    # Logical Address Functions
-    ########################################################
-
-    @staticmethod
-    def unmap_sector() -> bytearray:
-        return bytearray([0x0] * NandConfig.SECTOR_BYTES)
-
-    async def read_logical(self, lba: LBA) -> bytearray:
-        """指定されたLBAを読み出し"""
-        # Write Bufferに書き込み中の場合は、Write Bufferから読み出す
-        if lba in self.write_buffer_lbas:
-            # Write Buffer上のLBAを取得
-            sector_index = self.write_buffer_lbas.index(lba)
-            # Write Buffer上のSectorを取得
-            sector_data = self.write_buffer[
-                sector_index * NandConfig.SECTOR_BYTES : (sector_index + 1)
-                * NandConfig.SECTOR_BYTES
-            ]
-            return sector_data
-        # LBA -> PBAの変換
-        pba = self._mapping.resolve(lba)
-        if pba is None:
-            return self.unmap_sector()
-
-        # PBAをCS, Block, Page, Sectorに展開して読み出し
-        chip, block, page, sector = NandConfig.decode_phys_addr(pba)
-        sector_data = await self.read_sector(chip, block, page, sector)
-        if sector_data is None:
-            return self.unmap_sector()
-        return sector_data
-
-    async def write_logical(self, lba: LBA, data: bytearray) -> bool:
-        """指定されたLBAに書き込む"""
-        # 書き込み先Chip/Blockを予約して先頭から使う
-        if (
-            self.current_write_chip is None
-            or self.current_write_block is None
-            or self.current_write_page is None
-            or self.current_write_sector is None
-        ):
-            (
-                self.current_write_chip,
-                self.current_write_block,
-            ) = await self._blockmng.alloc()
-            self.current_write_page = 0
-            self.current_write_sector = 0
-            self.write_buffer_lbas = list()  # 書き込み先LBAを初期化
-        # PBA決定 + Mapping更新
-        pba = NandConfig.encode_phys_addr(
-            self.current_write_chip,
-            self.current_write_block,
-            self.current_write_page,
-            self.current_write_sector,
-        )
-        self._mapping.update(lba, pba)
-        # Write Bufferに書き込み
-        self.write_buffer[
-            self.current_write_sector * NandConfig.SECTOR_BYTES : (
-                self.current_write_sector + 1
-            )
-            * NandConfig.SECTOR_BYTES
-        ] = data
-        # Write Buffer上のLBA情報を更新
-        self.write_buffer_lbas.append(lba)
-
-        # Write Bufferがいっぱいになったら書き込み
-        if len(self.write_buffer_lbas) < NandConfig.SECTOR_PER_PAGE:
-            # 次のセクタへ移動
-            self.current_write_sector += 1
-            return True
-        else:
-            # 書き込み
-            write_result = await self.write_page(
-                self.current_write_chip,
-                self.current_write_block,
-                self.current_write_page,
-                self.write_buffer,
-            )
-            # 書き込み先LBAを初期化
-            self.write_buffer_lbas = list()
-            # 次のページへ移動
-            self.current_write_sector = 0
-            self.current_write_page += 1
-            # Block内のページを使い切ったら書き込み先を初期化
-            if self.current_write_page >= NandConfig.PAGES_PER_BLOCK:
-                self.current_write_chip = None
-                self.current_write_block = None
-                self.current_write_page = None
-                self.current_write_sector = None
-            # 書き込み結果を返却
-            return write_result

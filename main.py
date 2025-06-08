@@ -13,7 +13,7 @@ async def main() -> None:
         print(f"Config loaded successfully. {ftl.config._data}")
     except Exception as e:
         print(f"Failed to load config: {e}")
-        await ftl.setup_initial()
+        await ftl.init_config()
 
     ftl.save_config()
     print(f"Config saved successfully. {ftl.config._data}")

@@ -54,44 +54,6 @@ class NandConfig:
     # total bits
     TOTAL_BITS = SECTOR_BITS + PAGE_BITS + BLOCK_BITS + CS_BITS
 
-    # sector mask (2^2 - 1 = 0x3)
-    SECTOR_MASK = (1 << SECTOR_BITS) - 1
-    # page mask (2^6 - 1 = 0x3F)
-    PAGE_MASK = (1 << PAGE_BITS) - 1
-    # block mask (2^10 - 1 = 0x3FF)
-    BLOCK_MASK = (1 << BLOCK_BITS) - 1
-    # cs mask (2^1 - 1 = 0x1)
-    CS_MASK = (1 << CS_BITS) - 1
-
-    @staticmethod
-    def decode_phys_addr(addr: PBA) -> tuple[CHIP, BLOCK, PAGE, SECTOR]:
-        """Decode NAND Flash Address
-        | chip[0] | block[9:0] | page[5:0] | sector[1:0] |
-        """
-        sector = addr & NandConfig.SECTOR_MASK
-        addr >>= NandConfig.SECTOR_BITS
-        page = addr & NandConfig.PAGE_MASK
-        addr >>= NandConfig.PAGE_BITS
-        block = addr & NandConfig.BLOCK_MASK
-        addr >>= NandConfig.BLOCK_BITS
-        chip = addr & NandConfig.CS_MASK
-        addr >>= NandConfig.CS_BITS
-        return chip, block, page, sector
-
-    @staticmethod
-    def encode_phys_addr(chip: CHIP, block: BLOCK, page: PAGE, sector: SECTOR) -> PBA:
-        """Encode NAND Flash Address
-        | chip[0] | block[9:0] | page[5:0] | sector[1:0] |
-        """
-        addr = chip & NandConfig.CS_MASK
-        addr <<= NandConfig.BLOCK_BITS
-        addr |= block & NandConfig.BLOCK_MASK
-        addr <<= NandConfig.PAGE_BITS
-        addr |= page & NandConfig.PAGE_MASK
-        addr <<= NandConfig.SECTOR_BITS
-        addr |= sector & NandConfig.SECTOR_MASK
-        return addr
-
 
 class NandCommandId:
     """NAND Flash Command"""
