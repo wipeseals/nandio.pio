@@ -841,8 +841,13 @@ class PioNandCommander:
             block_addr=block,
             cs=chip_index,
         )
-        # TODO: DMAに置き換え
-        PioCmdBuilder.data_input(tx_payload0, data=data_extend, cs=chip_index)
+        # 00: Original
+        # PioCmdBuilder.data_input(tx_payload0, data=data_extend, cs=chip_index)
+        # 01: Prepared
+        PioCmdBuilder.data_input_only_header(tx_payload0, len(data))
+        Util.apply_cs_to_data_array(data_extend, cs=chip_index)
+        tx_payload0.extend(data_extend)  # Append data to the payload
+
         PioCmdBuilder.cmd_latch(
             tx_payload0, cmd=NandCommandId.PROGRAM_2ND, cs=chip_index
         )
