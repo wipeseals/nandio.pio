@@ -1,6 +1,11 @@
+import uasyncio
+import rp2
 import json
 from mpy.driver import NandIo, FwNandCommander, PioNandCommander
-from sim.nandio_pio import BLOCK, CHIP, LBA, PAGE, PBA, NandConfig
+from sim.nandio_pio import BLOCK, CHIP, LBA, PAGE, PBA, SECTOR, NandConfig
+
+# Logical Block Address Group
+LBG = int
 
 
 class FtlConfig:
@@ -147,20 +152,20 @@ class NandBlockManager:
     async def alloc(self) -> tuple[CHIP, BLOCK]:
         """空きBlockを確保"""
         while True:
-            cs, block = self._pick_free()
-            if block is None or cs is None:
+            chip, block = self._pick_free()
+            if block is None or chip is None:
                 raise ValueError("No Free Block")
             else:
                 # Erase OKのものを採用。だめならやり直し
                 is_erase_ok = await self._nandcmd.erase_block(
-                    chip_index=cs, block=block
+                    chip_index=chip, block=block
                 )
                 if is_erase_ok:
-                    self._mark_alloc(chip_index=cs, block=block)
-                    return cs, block
+                    self._mark_alloc(chip_index=chip, block=block)
+                    return chip, block
                 else:
                     # Erase失敗、BadBlockとしてマークし、Freeせず次のBlockを探す
-                    self._mark_bad(chip_index=cs, block=block)
+                    self._mark_bad(chip_index=chip, block=block)
 
     async def free(self, chip_index: CHIP, block: BLOCK) -> None:
         """Blockを解放"""
@@ -249,8 +254,33 @@ class PageCodec:
         return data[: NandConfig.PAGE_USABLE_BYTES]  # Parity除去
 
 
-# Logical Block Address Group
-LBG = int
+class DmaUtil:
+    @staticmethod
+    def setup_copy(src_buf: bytearray, dst_buf: bytearray) -> rp2.DMA:
+        dma = rp2.DMA()
+        ctrl = dma.pack_ctrl(
+            size=0,  # 1byte転送
+            inc_read=True,
+            inc_write=True,
+        )
+        dma.config(
+            read=src_buf,
+            write=dst_buf,
+            count=len(src_buf),
+            ctrl=ctrl,
+            trigger=False,  # 自動開始しない
+        )
+        return dma
+
+    @staticmethod
+    async def copy(
+        src_buf: bytearray,
+        dst_buf: bytearray,
+    ) -> None:
+        dma = DmaUtil.setup_copy(src_buf, dst_buf)
+        dma.active(True)
+        while not dma.active():
+            await uasyncio.sleep_ms(1)
 
 
 class Mapping:
@@ -260,32 +290,33 @@ class Mapping:
     ) // NandConfig.SECTOR_BYTES
 
     @staticmethod
-    def lba_to_lbg(lba: LBA) -> LBG:
-        """Convert Logical Block Address to Logical Block Group"""
-        return lba // Mapping.LBA_PER_LBG
+    def lba_to_lbg(lba: LBA) -> tuple[LBG, LBA]:
+        return lba // Mapping.LBA_PER_LBG, lba % Mapping.LBA_PER_LBG
 
     @staticmethod
     def lbg_to_lba(lbg: LBG, offset_lba: LBA = 0) -> LBA:
-        """Convert Logical Block Group to Logical Block Address"""
         return lbg * Mapping.LBA_PER_LBG + offset_lba
 
     def __init__(self) -> None:
-        # Mapping from Logical Block Group (LBG) to NAND Block (Chip, Block)
+        # LBG -> (CHIP, BLOCK) mapping. LBA % LBGで内部オフセットが求まる
         self._mapping: dict[LBG, tuple[CHIP, BLOCK]] = {}
 
     async def init_config(self) -> None:
-        """Initialize the mapping configuration"""
         self._mapping.clear()
 
     def save_config(self, config: FtlConfig) -> bool:
-        """Save the mapping configuration to FTL config"""
         config.set("mapping", self._mapping, save=False)
         return True
 
     def load_config(self, config: FtlConfig) -> bool:
-        """Load the mapping configuration from FTL config"""
         self._mapping = config.get("mapping", {})
         return True
+
+    def update(self, lbg: LBG, chip: CHIP, block: BLOCK) -> None:
+        self._mapping[lbg] = (chip, block)
+
+    def resolve(self, lbg: LBG) -> tuple[CHIP | None, BLOCK | None]:
+        return self._mapping.get(lbg, (None, None))
 
 
 class FlashTranslationLayer:
@@ -324,15 +355,164 @@ class FlashTranslationLayer:
         nandcmd: FwNandCommander | PioNandCommander,
         config: FtlConfig | None = None,
     ) -> None:
-        # NAND IO Drivers/Commander, Config
+        #########################################
+        # Set by External
         self.nandio = nandio
         self.nandcmd = nandcmd
         self.config = config if config is not None else FtlConfig()
 
-        # NAND Block Manager
+        #########################################
+        # Internal Components
         self._blockmng = NandBlockManager(nandcmd=self.nandcmd)
-        # Mapping
         self._mapping = Mapping()
+
+        #########################################
+        # Primitives
+        # 現在処理中のLBG
+        self._write_lbg: LBG | None = None
+        # １NAND Block分のwrite_buffers[page]
+        self._write_buffers: list[bytearray] = [
+            bytearray(NandConfig.SECTOR_BYTES) * NandConfig.SECTOR_PER_PAGE
+        ] * NandConfig.PAGES_PER_BLOCK
+        # 変更したらTrue
+        self._is_write_dirty: bool = False
+
+    async def _store_write_buffer(self) -> None:
+        """書き込みバッファをNAND Flashに書き込み、Write Buffersをクリアする"""
+        # 不要
+        if self._write_lbg is None or not self._is_write_dirty:
+            return
+        # 途中でエラーが出たケースは最初からやり直せるようにする
+        is_ok = False
+
+        while not is_ok:
+            # 書き込み先決定
+            chip, block = await self._blockmng.alloc()
+            # 先頭から全Page書き込み
+            for page_index in range(NandConfig.PAGES_PER_BLOCK):
+                data = self._write_buffers[page_index]
+                prog_ret = await self._blockmng.program(
+                    chip_index=chip, block=block, page=page_index, data=data
+                )
+                # 書き込み失敗、BadBlockとしてマークし、やり直し
+                if not prog_ret:
+                    await self._blockmng.free(chip_index=chip, block=block)
+                    self._blockmng._mark_bad(chip_index=chip, block=block)
+                    break  # 残りのPageは書き込まない
+            # 全部やりきれたら完了とする
+            is_ok = True
+
+        # Update Mapping
+        self._mapping.update(self._write_lbg, chip, block)
+        # Clear Write Buffers
+        self._write_lbg = None
+        self._is_write_dirty = False
+        for buf in self._write_buffers:
+            buf.clear()
+
+    async def _load_write_buffer(self, lbg: LBG) -> None:
+        """LBGに対応する書き込みバッファをNAND Flashから読み込み、Write Buffersをセットする"""
+        # Write先取得
+        chip, block = self._mapping.resolve(lbg)
+
+        # まだWriteしたことがない場合、読み出し不要
+        if chip is None or block is None:
+            return
+
+        # 全Page読み込み
+        for page_index in range(NandConfig.PAGES_PER_BLOCK):
+            read_page_data = await self._blockmng.read(
+                chip_index=chip, block=block, page=page_index
+            )
+            # Read Error
+            if read_page_data is None:
+                raise ValueError(
+                    f"Read Error: Chip {chip}, Block {block}, Page {page_index} data: {read_page_data}"
+                )
+
+            # Copy data to write buffers
+            for sector_index in range(NandConfig.SECTOR_PER_PAGE):
+                byte_offset = sector_index * NandConfig.SECTOR_BYTES
+                src_buf = memoryview(read_page_data)[
+                    byte_offset : byte_offset + NandConfig.SECTOR_BYTES
+                ]
+                dst_buf = memoryview(self._write_buffers[page_index])[
+                    byte_offset : byte_offset + NandConfig.SECTOR_BYTES
+                ]
+                await DmaUtil.copy(src_buf=src_buf, dst_buf=dst_buf)  # type: ignore (memoryview is not bytearray)
+        # LBGをセット
+        self._write_lbg = lbg
+        self._is_write_dirty = False
+
+    def _sector_offset_to_write_buffer_pos(
+        self, sector_offset: LBA
+    ) -> tuple[PAGE, SECTOR]:
+        """LBAからWrite Bufferの位置を計算"""
+        page_in_block = sector_offset // NandConfig.SECTOR_PER_PAGE
+        sector_in_page = sector_offset % NandConfig.SECTOR_PER_PAGE
+        return page_in_block, sector_in_page
+
+    async def write_logical(self, lba: LBA, src_data: bytearray) -> None:
+        """指定されたLBAにデータを書き込む"""
+        lbg, sector_in_block = Mapping.lba_to_lbg(lba)
+        # LBGが変わった場合、書き込みバッファをフラッシュ
+        if self._write_lbg != lbg and self._is_write_dirty:
+            await self._store_write_buffer()
+        # まだLBGがセットされていない場合、読み込み
+        if self._write_lbg is None:
+            await self._load_write_buffer(lbg)
+
+        # 転送先決定
+        page_in_block, sector_in_page = self._sector_offset_to_write_buffer_pos(lba)
+        byte_offset = sector_in_page * NandConfig.SECTOR_BYTES
+        dst_buf = memoryview(self._write_buffers[page_in_block])[
+            byte_offset : byte_offset + NandConfig.SECTOR_BYTES
+        ]
+        # 書き込みバッファにデータを転送
+        await DmaUtil.copy(src_buf=src_data, dst_buf=dst_buf)  # type: ignore (memoryview is not bytearray)
+        # 変更したことを覚えておく
+        self._is_write_dirty = True
+
+    async def flush(self) -> None:
+        """書き込みバッファをNAND Flashに書き込む"""
+        await self._store_write_buffer()
+
+    async def read_logical(self, lba: LBA) -> bytearray:
+        """指定されたLBAのデータを読み出す"""
+        # NAND Block内位置を計算
+        page_in_block, sector_in_page = self._sector_offset_to_write_buffer_pos(lba)
+        # LBGとSectorを計算
+        lbg, _ = Mapping.lba_to_lbg(lba)
+        # Mapping を確認
+        chip, block = self._mapping.resolve(lbg)
+
+        # 現在のLBG上にある -> 書き込みバッファから読み出し
+        if self._write_lbg == lbg:
+            # 書き込みバッファから読み出し
+            byte_offset = sector_in_page * NandConfig.SECTOR_BYTES
+            src_buf = memoryview(self._write_buffers[page_in_block])[
+                byte_offset : byte_offset + NandConfig.SECTOR_BYTES
+            ]
+            return bytearray(src_buf)
+
+        # Mappingがない -> 空データ
+        if chip is None or block is None:
+            return bytearray(NandConfig.SECTOR_BYTES)
+
+        # Mappingがある -> NAND Flashから読み出し
+        read_page_data = await self._blockmng.read(
+            chip_index=chip, block=block, page=page_in_block
+        )
+        # Read Error
+        if read_page_data is None:
+            raise ValueError(
+                f"Read Error: Chip {chip}, Block {block}, Page {page_in_block} data: {read_page_data}"
+            )
+        # 読み出しデータからSectorを抽出
+        start_index = sector_in_page * NandConfig.SECTOR_BYTES
+        end_index = start_index + NandConfig.SECTOR_BYTES
+        sector_data = read_page_data[start_index:end_index]
+        return sector_data
 
     async def init_config(self) -> None:
         """FTLの初期化 (初めて起動したときの設定)"""

@@ -15,8 +15,16 @@ async def main() -> None:
         print(f"Failed to load config: {e}")
         await ftl.init_config()
 
-    ftl.save_config()
-    print(f"Config saved successfully. {ftl.config._data}")
+    def create_test_data(lba: int) -> bytearray:
+        return bytearray([lba & 0xFF] * 512)
+
+    await ftl.write_logical(0, create_test_data(0))
+    await ftl.write_logical(1, create_test_data(1))
+    assert await ftl.read_logical(0) == create_test_data(0)
+    assert await ftl.read_logical(1) == create_test_data(1)
+
+    # ftl.save_config()
+    # print(f"Config saved successfully. {ftl.config._data}")
 
 
 if __name__ == "__main__":
