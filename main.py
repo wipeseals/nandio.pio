@@ -8,9 +8,15 @@ async def main() -> None:
     nandio = NandIo(keep_wp=False)
     commander = PioNandCommander(nandio)
     ftl = FlashTranslationLayer(nandio, commander)
-    await ftl.setup()
+    try:
+        ftl.load_config()
+        print(f"Config loaded successfully. {ftl.config._data}")
+    except Exception as e:
+        print(f"Failed to load config: {e}")
+        await ftl.setup_initial()
 
-    print(f"badblocks[0]{ftl.blockmng.badblock_bitmaps[0]:x}")
+    ftl.save_config()
+    print(f"Config saved successfully. {ftl.config._data}")
 
 
 if __name__ == "__main__":

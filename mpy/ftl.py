@@ -224,22 +224,57 @@ class Mapping:
         self.l2p.pop(lba, None)
 
 
+class FtlConfig:
+    """FTL Configuration"""
+
+    def __init__(self, filepath: str = "ftl.json") -> None:
+        self._filepath = filepath
+        self._data = dict()
+
+    def load(self) -> bool:
+        f = open(self._filepath, "r")
+        json_text = f.read()
+        self._data = json.loads(json_text)
+        f.close()
+        return True
+
+    def save(self) -> bool:
+        json_str = json.dumps(self._data)
+        f = open(self._filepath, "w")
+        f.write(json_str)
+        f.close()
+        return True
+
+    def get(self, key: str, default=None) -> any:
+        return self._data.get(key, default)
+
+    def set(self, key: str, value, save: bool = False) -> None:
+        self._data[key] = value
+        if save:
+            self.save()
+
+
 class FlashTranslationLayer:
     """Flash Translation Layer (FTL)"""
 
     def __init__(
-        self, nandio: NandIo, nandcmd: FwNandCommander | PioNandCommander
+        self,
+        nandio: NandIo,
+        nandcmd: FwNandCommander | PioNandCommander,
+        config: FtlConfig | None = None,
     ) -> None:
-        # NAND IO Drivers
+        # NAND IO Drivers/Commander
         self.nandio = nandio
-        # NAND Commander
         self.nandcmd = nandcmd
+        # Configuration
+        self.config = config if config is not None else FtlConfig()
+
         # NAND Block Manager
-        self.blockmng = NandBlockManager(nandcmd=self.nandcmd)
+        self._blockmng = NandBlockManager(nandcmd=self.nandcmd)
         # NAND Page Codec
-        self.codec = PageCodec()
+        self._codec = PageCodec()
         # LBA -> PBAのマッピング
-        self.mapping = Mapping()
+        self._mapping = Mapping()
 
         # Write Buffer (WriteはEncode都合でpage単位で行うため、複数sector束ねる用)
         self.write_buffer: bytearray = bytearray([0x0] * NandConfig.PAGE_USABLE_BYTES)
@@ -251,8 +286,30 @@ class FlashTranslationLayer:
         self.current_write_page: int | None = None
         self.current_write_sector: int | None = None
 
-    async def setup(self) -> None:
-        await self.blockmng.setup()
+    async def setup_initial(self) -> None:
+        """FTLの初期化 (初めて起動したときの設定)"""
+        await self._blockmng.setup()
+
+    def save_config(self) -> bool:
+        """FTLの設定を反映して保存"""
+        self.config.set("num_chip", self._blockmng.num_chip)
+        self.config.set("badblock_bitmaps", self._blockmng.badblock_bitmaps)
+        self.config.set("allocated_bitmaps", self._blockmng.allocated_bitmaps)
+        return self.config.save()
+
+    def load_config(self) -> bool:
+        """FTLの設定を読み込み"""
+        if not self.config.load():
+            return False
+        # 設定を反映
+        self._blockmng.num_chip = self.config.get("num_chip", 0)
+        self._blockmng.badblock_bitmaps = self.config.get(
+            "badblock_bitmaps", [0] * NandConfig.MAX_CS
+        )
+        self._blockmng.allocated_bitmaps = self.config.get(
+            "allocated_bitmaps", [0] * NandConfig.MAX_CS
+        )
+        return True
 
     ########################################################
     # Physical Address Read
@@ -263,11 +320,11 @@ class FlashTranslationLayer:
     ) -> bytearray | None:
         """指定されたページをすべて読み出し"""
         # データを読み込む
-        page_data = await self.blockmng.read(chip_index, block, page)
+        page_data = await self._blockmng.read(chip_index, block, page)
         if page_data is None:
             return None
         # データをデコード
-        decode_page_data = self.codec.decode(page_data)
+        decode_page_data = self._codec.decode(page_data)
         if decode_page_data is None:
             return None
         return decode_page_data
@@ -295,11 +352,11 @@ class FlashTranslationLayer:
     ) -> bool:
         """指定されたページを書き込む"""
         # データをエンコード
-        encode_page_data = self.codec.encode(data)
+        encode_page_data = self._codec.encode(data)
         if encode_page_data is None:
             return False
         # データを書き込む
-        result = await self.blockmng.program(chip_index, block, page, encode_page_data)
+        result = await self._blockmng.program(chip_index, block, page, encode_page_data)
         if not result:
             return False
         return True
@@ -325,7 +382,7 @@ class FlashTranslationLayer:
             ]
             return sector_data
         # LBA -> PBAの変換
-        pba = self.mapping.resolve(lba)
+        pba = self._mapping.resolve(lba)
         if pba is None:
             return self.unmap_sector()
 
@@ -348,7 +405,7 @@ class FlashTranslationLayer:
             (
                 self.current_write_chip,
                 self.current_write_block,
-            ) = await self.blockmng.alloc()
+            ) = await self._blockmng.alloc()
             self.current_write_page = 0
             self.current_write_sector = 0
             self.write_buffer_lbas = list()  # 書き込み先LBAを初期化
@@ -359,7 +416,7 @@ class FlashTranslationLayer:
             self.current_write_page,
             self.current_write_sector,
         )
-        self.mapping.update(lba, pba)
+        self._mapping.update(lba, pba)
         # Write Bufferに書き込み
         self.write_buffer[
             self.current_write_sector * NandConfig.SECTOR_BYTES : (
