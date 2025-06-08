@@ -829,6 +829,73 @@ class PioNandCommander:
             data=data_extend,
         )
 
+        PioCmdBuilder.init_pin(tx_payload0)
+        PioCmdBuilder.assert_cs(tx_payload0, cs=chip_index)
+        PioCmdBuilder.cmd_latch(
+            tx_payload0, cmd=NandCommandId.PROGRAM_1ST, cs=chip_index
+        )
+        PioCmdBuilder.full_addr_latch(
+            tx_payload0,
+            column_addr=col,
+            page_addr=page,
+            block_addr=block,
+            cs=chip_index,
+        )
+        # TODO: DMAに置き換え
+        PioCmdBuilder.data_input(tx_payload0, data=data_extend, cs=chip_index)
+        PioCmdBuilder.cmd_latch(
+            tx_payload0, cmd=NandCommandId.PROGRAM_2ND, cs=chip_index
+        )
+        PioCmdBuilder.wait_rbb(tx_payload0)
+        PioCmdBuilder.cmd_latch(
+            tx_payload0, cmd=NandCommandId.STATUS_READ, cs=chip_index
+        )
+        PioCmdBuilder.data_output(tx_payload0, data_count=1)
+        PioCmdBuilder.deassert_cs(tx_payload0)
+
+        tx_dma0 = self._setup_tx_dma_payload(
+            dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload0
+        )
+        tx_dma0.active(1)
+
+        rx_data = bytearray(1)
+        rx_dma0 = self._setup_rx_dma_data(
+            dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
+        )
+        rx_dma0.active(1)
+
+        await self._wait_for_dma(rx_dma0)
+
+        # finalize
+        sm0.active(0)
+        tx_dma0.close()
+        rx_dma0.close()
+
+        is_ok = (rx_data[0] & NandStatus.PROGRAM_ERASE_FAIL) == 0
+        return is_ok
+
+    async def program_page_simple(
+        self,
+        chip_index: int,
+        block: int,
+        page: int,
+        data: bytearray,
+        col: int = 0,
+    ) -> bool:
+        sm0 = self._setup_pio0_nandio()
+        sm0.active(1)
+
+        data_extend = array.array("I", [x for x in data])
+        tx_payload0 = array.array("I")
+        PioCmdBuilder.seq_program(
+            tx_payload0,
+            cs=chip_index,
+            column_addr=col,
+            page_addr=page,
+            block_addr=block,
+            data=data_extend,
+        )
+
         tx_dma0 = self._setup_tx_dma_payload(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload0
         )
