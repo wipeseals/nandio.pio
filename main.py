@@ -18,8 +18,18 @@ async def main() -> None:
     def create_test_data(lba: int) -> bytearray:
         return bytearray([lba & 0xFF] * 512)
 
+    print("Writing and reading logical blocks...")
     await ftl.write_logical(0, create_test_data(0))
     await ftl.write_logical(1, create_test_data(1))
+
+    print("Reading back logical blocks...")
+    assert await ftl.read_logical(0) == create_test_data(0)
+    assert await ftl.read_logical(1) == create_test_data(1)
+
+    print("Flushing changes to NAND...")
+    await ftl.flush()
+
+    print("Reading back logical blocks after flush...")
     assert await ftl.read_logical(0) == create_test_data(0)
     assert await ftl.read_logical(1) == create_test_data(1)
 
