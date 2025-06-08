@@ -54,22 +54,30 @@ async def main() -> None:
     nandio = NandIo(keep_wp=False)
     commander = PioNandCommander(nandio)
     # commander = FwNandCommander(nandio)
-    ftl = FlashTranslationLayer(nandio, commander)
-    try:
-        ftl.load_config()
-        print(f"Config loaded successfully. {ftl.config._data}")
-    except Exception as e:
-        print(f"Failed to load config: {e}")
-        await ftl.init_config()
-    # reset NAND IC
-    await ftl.setup_nandio()
 
-    await test_sample(ftl)
-    # await test_seq_wr(ftl, num_lb=ftl.report_capacity_lb())
+    cs = 0
+    print("Initializing NAND I/O...")
+    await commander.reset(cs)
+    print("NAND I/O initialized.")
+    print("Reading NAND ID...")
+    id = await commander.read_id(cs)
+    print(f"NAND ID: {id.hex()}")
+    # ftl = FlashTranslationLayer(nandio, commander)
+    # try:
+    #     ftl.load_config()
+    #     print(f"Config loaded successfully. {ftl.config._data}")
+    # except Exception as e:
+    #     print(f"Failed to load config: {e}")
+    #     await ftl.init_config()
+    # # reset NAND IC
+    # await ftl.setup_nandio()
 
+    # await test_sample(ftl)
+    # # await test_seq_wr(ftl, num_lb=ftl.report_capacity_lb())
+
+    # # ftl.save_config()
     # ftl.save_config()
-    ftl.save_config()
-    print(f"config: {ftl.config._data}")
+    # print(f"config: {ftl.config._data}")
 
 
 if __name__ == "__main__":

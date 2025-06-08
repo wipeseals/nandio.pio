@@ -353,7 +353,7 @@ class PioNandCommander:
         self,
         nandio: NandIo,
         timeout_ms: int = 5000,
-        max_freq: int = 125_000_000,  # Max: 125MHz だが安定優先で少し下げる
+        max_freq: int = 125_000_000,
     ) -> None:
         self._timeout_ms = timeout_ms
         self._max_freq = max_freq
@@ -671,7 +671,7 @@ class PioNandCommander:
                     f"Timeout while waiting for DMA to finish. Elapsed: {elapsed_ms} ms"
                 )
 
-    async def reset(self, chip_index) -> None:
+    async def reset(self, chip_index: int) -> None:
         sm0 = self._setup_pio0_nandio()
         sm0.active(1)
 
@@ -682,13 +682,13 @@ class PioNandCommander:
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
         )
         tx_dma0.active(1)
-
         await self._wait_for_dma(tx_dma0)
+
         # wait after RESET
         await uasyncio.sleep_ms(100)
 
         sm0.active(0)
-        tx_dma0.close()
+        # tx_dma0.close()
 
     async def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
         sm0 = self._setup_pio0_nandio()
@@ -700,14 +700,16 @@ class PioNandCommander:
         tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
         )
-        tx_dma0.active(1)
 
         # RX Data
         rx_data = bytearray(num_bytes)
         rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=num_bytes
         )
+
+        # Start DMA
         rx_dma0.active(1)
+        tx_dma0.active(1)
         await self._wait_for_dma(rx_dma0)
 
         # finalize
@@ -740,14 +742,16 @@ class PioNandCommander:
         tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
         )
-        tx_dma0.active(1)
 
         # RX Data
         rx_data = bytearray(num_bytes)
         rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=num_bytes
         )
+
+        # start DMA
         rx_dma0.active(1)
+        tx_dma0.active(1)
         await self._wait_for_dma(rx_dma0)
 
         # finalize
@@ -766,14 +770,16 @@ class PioNandCommander:
         tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
         )
-        tx_dma0.active(1)
 
         # RX Data
         rx_data = bytearray(1)
         rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
         )
+
+        # start DMA
         rx_dma0.active(1)
+        tx_dma0.active(1)
         await self._wait_for_dma(rx_dma0)
 
         # finalize
@@ -793,14 +799,16 @@ class PioNandCommander:
         tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
         )
-        tx_dma0.active(1)
 
         # RX Data
         rx_data = bytearray(1)
         rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
         )
+
+        # start DMA
         rx_dma0.active(1)
+        tx_dma0.active(1)
         await self._wait_for_dma(rx_dma0)
 
         # finalize
@@ -821,7 +829,6 @@ class PioNandCommander:
         sm4.put(bitor_data)
 
         tx_dma0 = self._setup_tx_dma_byte(dreq=Dreq.PIO1_SM0_TX, sm=sm4, data=data)
-        tx_dma0.active(1)
 
         rx_data = array.array("I", Util.roundup4(len(data)) * [0])
         rx_dma0 = rp2.DMA()
@@ -838,7 +845,10 @@ class PioNandCommander:
             ctrl=rx_dma0_ctrl,
             trigger=False,
         )
+
+        # Start DMA
         rx_dma0.active(1)
+        tx_dma0.active(1)
         await self._wait_for_dma(rx_dma0)
 
         sm4.active(0)
@@ -933,15 +943,17 @@ class PioNandCommander:
             tx_payload=tx_payload2,
             dma=tx_dma2,
         )
-        # TX Payload0だけを開始、残りはchain
-        tx_dma0.active(1)
 
+        # RX Data (Status Read Response)
         rx_data = bytearray(1)
         rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
         )
-        rx_dma0.active(1)
 
+        # Start DMA
+        # TX Payload0だけを開始、残りはchain
+        rx_dma0.active(1)
+        tx_dma0.active(1)
         await self._wait_for_dma(rx_dma0)
 
         # finalize
@@ -979,14 +991,15 @@ class PioNandCommander:
         tx_dma0 = self._setup_tx_dma_word(
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload0
         )
-        tx_dma0.active(1)
 
         rx_data = bytearray(1)
         rx_dma0 = self._setup_rx_dma_byte(
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
         )
-        rx_dma0.active(1)
 
+        # start DMA
+        rx_dma0.active(1)
+        tx_dma0.active(1)
         await self._wait_for_dma(rx_dma0)
 
         # finalize
