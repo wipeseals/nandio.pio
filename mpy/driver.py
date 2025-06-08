@@ -813,6 +813,10 @@ class PioNandCommander:
         rx_dma0.active(1)
         await self._wait_for_dma(rx_dma0)
 
+        sm4.active(0)
+        tx_dma0.close()
+        rx_dma0.close()
+
         return rx_data
 
     async def program_page(
