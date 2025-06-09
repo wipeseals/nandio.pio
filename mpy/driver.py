@@ -617,9 +617,15 @@ class PioNandCommander:
         dreq: int,
         sm: rp2.StateMachine,
         data: bytearray,
+        dma: rp2.DMA | None = None,
+        chain_dma: rp2.DMA | None = None,
     ) -> rp2.DMA:
-        """TX payload送信用DMAのセットアップ"""
-        dma = rp2.DMA()
+        """TX data送信用DMAのセットアップ"""
+
+        if dma is None:
+            dma = rp2.DMA()
+        # chain先が指定されていたらそのDMAのchannel、指定がなければ自身(Chainしない)
+        chain_to: int = dma.channel if chain_dma is None else chain_dma.channel  # type: ignore
 
         tx_dma0_ctrl = dma.pack_ctrl(
             size=0,  # 1byte転送
@@ -627,6 +633,7 @@ class PioNandCommander:
             inc_write=False,  # tx_fifoは場所固定
             bswap=False,
             treq_sel=dreq,
+            chain_to=chain_to,
         )
         dma.config(
             read=data,
@@ -819,44 +826,6 @@ class PioNandCommander:
         is_ok = (rx_data[0] & NandStatus.PROGRAM_ERASE_FAIL) == 0
         return is_ok
 
-    async def _bitor_cs(self, chip_index: int, data: bytearray) -> array.array:
-        """PIO + DMAを使用して、CSをビットORする. 1byte -> 4byte"""
-        sm4 = self._setup_pio1_merge_cs()
-        sm4.active(1)
-
-        # CEB[1:0] に設定する値を合成するPIO
-        bitor_data = 0xFFFFFFFF & ~(1 << chip_index)
-        sm4.put(bitor_data)
-
-        tx_dma0 = self._setup_tx_dma_byte(dreq=Dreq.PIO1_SM0_TX, sm=sm4, data=data)
-
-        rx_data = array.array("I", Util.roundup4(len(data)) * [0])
-        rx_dma0 = rp2.DMA()
-        rx_dma0_ctrl = rx_dma0.pack_ctrl(
-            size=2,  # 4byte転送
-            inc_read=False,  # rx_fifoは場所固定
-            inc_write=True,
-            treq_sel=Dreq.PIO1_SM0_RX,
-        )
-        rx_dma0.config(
-            read=sm4,
-            write=rx_data,
-            count=len(rx_data),
-            ctrl=rx_dma0_ctrl,
-            trigger=False,
-        )
-
-        # Start DMA
-        rx_dma0.active(1)
-        tx_dma0.active(1)
-        await self._wait_for_dma(rx_dma0)
-
-        sm4.active(0)
-        tx_dma0.close()
-        rx_dma0.close()
-
-        return rx_data
-
     async def program_page(
         self,
         chip_index: int,
@@ -865,19 +834,17 @@ class PioNandCommander:
         data: bytearray,
         col: int = 0,
     ) -> bool:
-        """
-        Page Program using PIO and DMA.
-        `page_program_simple()` と比較し、書き込みデータのbit orやPayloadへの統合を改良し、更にCPUの負荷を軽減した高速版
-
-        Overview:
-        - Program Page の Data Body を Payload中に組み込まず、 Descriptorを分割して転送
-        - 転送データへのCS bitorをPIO + DMAで実行
-        - Payload作成のDMA転送の裏で残りのPayloadを作成
-        """
+        # for NAND IO
         sm0 = self._setup_pio0_nandio()
         sm0.active(1)
+        # for CS Bit OR
+        sm4 = self._setup_pio1_merge_cs()
+        sm4.active(1)
+        # CEB[1:0] に設定する値を合成するPIO
+        bitor_data = 0xFFFFFFFF & ~(1 << chip_index)
+        sm4.put(bitor_data)
 
-        async def _create_payload0() -> array.array:
+        def _create_payload0() -> array.array:
             tx_payload0 = array.array("I")
             PioCmdBuilder.init_pin(tx_payload0)
             PioCmdBuilder.assert_cs(tx_payload0, cs=chip_index)
@@ -894,11 +861,7 @@ class PioNandCommander:
             PioCmdBuilder.data_input_only_header(tx_payload0, len(data))
             return tx_payload0
 
-        async def _create_payload1() -> array.array:
-            tx_payload1 = await self._bitor_cs(chip_index, data)
-            return tx_payload1
-
-        async def _create_payload2() -> array.array:
+        def _create_payload2() -> array.array:
             tx_payload2 = array.array("I")
             PioCmdBuilder.cmd_latch(
                 tx_payload2, cmd=NandCommandId.PROGRAM_2ND, cs=chip_index
@@ -911,12 +874,9 @@ class PioNandCommander:
             PioCmdBuilder.deassert_cs(tx_payload2)
             return tx_payload2
 
-        # CS ORを行っている裏で残りのPayloadを作成する
-        tx_payload0, tx_payload1, tx_payload2 = await uasyncio.gather(
-            _create_payload0(),
-            _create_payload1(),
-            _create_payload2(),
-        )
+        tx_payload0 = _create_payload0()
+        tx_payload1 = data
+        tx_payload2 = _create_payload2()
 
         # TX PayloadのChain用に事前確保
         tx_dma0 = rp2.DMA()
@@ -930,10 +890,10 @@ class PioNandCommander:
             dma=tx_dma0,
             chain_dma=tx_dma1,
         )
-        self._setup_tx_dma_word(
-            dreq=Dreq.PIO0_SM0_TX,
-            sm=sm0,
-            tx_payload=tx_payload1,
+        self._setup_tx_dma_byte(
+            dreq=Dreq.PIO1_SM0_TX,
+            sm=sm4,
+            data=tx_payload1,
             dma=tx_dma1,
             chain_dma=tx_dma2,
         )
@@ -943,6 +903,22 @@ class PioNandCommander:
             tx_payload=tx_payload2,
             dma=tx_dma2,
         )
+        # Proxy PIO1 to PIO0
+        proxy_dma0 = rp2.DMA()
+        proxy_dma0_ctrl = proxy_dma0.pack_ctrl(
+            size=2,  # 4byte転送
+            inc_read=False,  # rx_fifoは場所固定
+            inc_write=False,  # tx_fifoは場所固定
+            bswap=False,
+            treq_sel=Dreq.PIO0_SM0_TX,
+        )
+        proxy_dma0.config(
+            read=sm4,
+            write=sm0,
+            count=len(tx_payload1),
+            ctrl=proxy_dma0_ctrl,
+            trigger=False,
+        )
 
         # RX Data (Status Read Response)
         rx_data = bytearray(1)
@@ -951,60 +927,24 @@ class PioNandCommander:
         )
 
         # Start DMA
-        # TX Payload0だけを開始、残りはchain
         rx_dma0.active(1)
+        proxy_dma0.active(1)
         tx_dma0.active(1)
-        await self._wait_for_dma(rx_dma0)
+        await self._wait_for_dma(
+            rx_dma0,
+            lambda: print(
+                f"sm0_tx:{sm0.tx_fifo()}, sm0_rx:{sm0.rx_fifo()}, sm4_tx:{sm4.tx_fifo()}, sm4_rx:{sm4.rx_fifo()}"
+                f", tx_dma0:{tx_dma0.active()}, tx_dma1:{tx_dma1.active()}, tx_dma2:{tx_dma2.active()}, proxy_dma0:{proxy_dma0.active()}, rx_dma0:{rx_dma0.active()}"
+            ),
+        )
 
         # finalize
         sm0.active(0)
+        sm4.active(0)
         tx_dma0.close()
         tx_dma1.close()
         tx_dma2.close()
-        rx_dma0.close()
-
-        is_ok = (rx_data[0] & NandStatus.PROGRAM_ERASE_FAIL) == 0
-        return is_ok
-
-    async def program_page_simple(
-        self,
-        chip_index: int,
-        block: int,
-        page: int,
-        data: bytearray,
-        col: int = 0,
-    ) -> bool:
-        sm0 = self._setup_pio0_nandio()
-        sm0.active(1)
-
-        data_extend = array.array("I", [x for x in data])
-        tx_payload0 = array.array("I")
-        PioCmdBuilder.seq_program(
-            tx_payload0,
-            cs=chip_index,
-            column_addr=col,
-            page_addr=page,
-            block_addr=block,
-            data=data_extend,
-        )
-
-        tx_dma0 = self._setup_tx_dma_word(
-            dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload0
-        )
-
-        rx_data = bytearray(1)
-        rx_dma0 = self._setup_rx_dma_byte(
-            dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
-        )
-
-        # start DMA
-        rx_dma0.active(1)
-        tx_dma0.active(1)
-        await self._wait_for_dma(rx_dma0)
-
-        # finalize
-        sm0.active(0)
-        tx_dma0.close()
+        proxy_dma0.close()
         rx_dma0.close()
 
         is_ok = (rx_data[0] & NandStatus.PROGRAM_ERASE_FAIL) == 0
