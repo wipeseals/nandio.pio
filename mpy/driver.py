@@ -668,19 +668,6 @@ class PioNandCommander:
         )
         return dma
 
-    async def _wait_for_dma(self, dma: rp2.DMA, f=None) -> None:
-        """DMAが完了するまで待機"""
-        start_ms = utime.ticks_ms()
-        while dma.active():
-            if f:
-                f()
-            await uasyncio.sleep_ms(self._wait_ms)
-            elapsed_ms = utime.ticks_diff(utime.ticks_ms(), start_ms)
-            if elapsed_ms > self._timeout_ms:
-                raise RuntimeError(
-                    f"Timeout while waiting for DMA to finish. Elapsed: {elapsed_ms} ms"
-                )
-
     async def reset(self, chip_index: int) -> None:
         sm0 = self._setup_pio0_nandio()
         sm0.active(1)
@@ -692,13 +679,12 @@ class PioNandCommander:
             dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload
         )
         tx_dma0.active(1)
-        await self._wait_for_dma(tx_dma0)
 
         # wait after RESET
         await uasyncio.sleep_ms(100)
 
         sm0.active(0)
-        # tx_dma0.close()
+        tx_dma0.close()
 
     async def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
         sm0 = self._setup_pio0_nandio()
@@ -724,24 +710,14 @@ class PioNandCommander:
             dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
         )
 
-        # buffer address
-        print(
-            f"&tx_payload: {uctypes.addressof(tx_payload):#x}, &rx_data: {uctypes.addressof(rx_data):#x}"
-        )
-
         # Start DMA
         rx_dma0.active(1)
         tx_dma0.active(1)
 
-        start_ms = utime.ticks_ms()
-        while not complete:
+        # TODO: 正しい待ち方ではないので原因がわかった後に修正する
+        #     :  DMAのcount分の転送が終わってもpassiveにならないケースもしくはPIOのIRQが発火しないケースが有るが、転送自体は終わっている
+        while not complete and rx_dma0.active():
             await uasyncio.sleep_ms(self._wait_ms)
-            # timeout
-            elapsed_ms = utime.ticks_diff(utime.ticks_ms(), start_ms)
-            if elapsed_ms > self._timeout_ms:
-                raise RuntimeError(
-                    f"Timeout while waiting for DMA to finish. Elapsed: {elapsed_ms} ms"
-                )
 
         # finalize
         sm0.active(0)
@@ -758,6 +734,14 @@ class PioNandCommander:
         num_bytes: int = NandConfig.PAGE_ALL_BYTES,
     ) -> bytearray | None:
         sm0 = self._setup_pio0_nandio()
+
+        complete = False
+
+        def set_complete(_):
+            nonlocal complete
+            complete = True
+
+        sm0.irq(set_complete)
         sm0.active(1)
 
         # TX Payload
@@ -783,7 +767,9 @@ class PioNandCommander:
         # start DMA
         rx_dma0.active(1)
         tx_dma0.active(1)
-        await self._wait_for_dma(rx_dma0)
+        # TODO: read_idに同じく
+        while not complete and rx_dma0.active():
+            await uasyncio.sleep_ms(self._wait_ms)
 
         # finalize
         sm0.active(0)
@@ -793,6 +779,13 @@ class PioNandCommander:
 
     async def read_status(self, chip_index: int) -> int:
         sm0 = self._setup_pio0_nandio()
+        complete = False
+
+        def set_complete(_):
+            nonlocal complete
+            complete = True
+
+        sm0.irq(set_complete)
         sm0.active(1)
 
         # TX Payload
@@ -811,7 +804,9 @@ class PioNandCommander:
         # start DMA
         rx_dma0.active(1)
         tx_dma0.active(1)
-        await self._wait_for_dma(rx_dma0)
+        # TODO: read_idに同じく
+        while not complete and rx_dma0.active():
+            await uasyncio.sleep_ms(self._wait_ms)
 
         # finalize
         sm0.active(0)
@@ -821,6 +816,13 @@ class PioNandCommander:
 
     async def erase_block(self, chip_index: int, block: int) -> bool:
         sm0 = self._setup_pio0_nandio()
+        complete = False
+
+        def set_complete(_):
+            nonlocal complete
+            complete = True
+
+        sm0.irq(set_complete)
         sm0.active(1)
 
         # TX Payload
@@ -840,7 +842,9 @@ class PioNandCommander:
         # start DMA
         rx_dma0.active(1)
         tx_dma0.active(1)
-        await self._wait_for_dma(rx_dma0)
+        # TODO: read_idに同じく
+        while not complete and rx_dma0.active():
+            await uasyncio.sleep_ms(self._wait_ms)
 
         # finalize
         sm0.active(0)
@@ -860,13 +864,15 @@ class PioNandCommander:
     ) -> bool:
         # for NAND IO
         sm0 = self._setup_pio0_nandio()
+        complete = False
+
+        def set_complete(_):
+            nonlocal complete
+            complete = True
+
+        sm0.irq(set_complete)
         sm0.active(1)
-        # for CS Bit OR
-        sm4 = self._setup_pio1_merge_cs()
-        sm4.active(1)
-        # CEB[1:0] に設定する値を合成するPIO
-        bitor_data = 0xFFFFFFFF & ~(1 << chip_index)
-        sm4.put(bitor_data)
+        # TODO: proxy PIO1 merge_cs
 
         def _create_payload0() -> array.array:
             tx_payload0 = array.array("I")
@@ -901,10 +907,9 @@ class PioNandCommander:
         tx_payload0 = _create_payload0()
         tx_payload1 = data
         tx_payload2 = _create_payload2()
-        # buffer address
-        print(f"&tx_payload0: {uctypes.addressof(tx_payload0)}")
-        print(f"&tx_payload1: {uctypes.addressof(tx_payload1)}")
-        print(f"&tx_payload2: {uctypes.addressof(tx_payload2)}")
+        print(f"tx_payload0: {tx_payload0}")
+        print(f"tx_payload1: {tx_payload1}")
+        print(f"tx_payload2: {tx_payload2}")
 
         # TX PayloadのChain用に事前確保
         tx_dma0 = rp2.DMA()
@@ -919,8 +924,8 @@ class PioNandCommander:
             chain_dma=tx_dma1,
         )
         self._setup_tx_dma_byte(
-            dreq=Dreq.PIO1_SM0_TX,
-            sm=sm4,
+            dreq=Dreq.PIO0_SM0_TX,
+            sm=sm0,
             data=tx_payload1,
             dma=tx_dma1,
             chain_dma=tx_dma2,
@@ -931,22 +936,6 @@ class PioNandCommander:
             tx_payload=tx_payload2,
             dma=tx_dma2,
         )
-        # Proxy PIO1 to PIO0
-        proxy_dma0 = rp2.DMA()
-        proxy_dma0_ctrl = proxy_dma0.pack_ctrl(
-            size=2,  # 4byte転送
-            inc_read=False,  # rx_fifoは場所固定
-            inc_write=False,  # tx_fifoは場所固定
-            bswap=False,
-            treq_sel=Dreq.PIO0_SM0_TX,
-        )
-        proxy_dma0.config(
-            read=sm4,
-            write=sm0,
-            count=len(tx_payload1),
-            ctrl=proxy_dma0_ctrl,
-            trigger=False,
-        )
 
         # RX Data (Status Read Response)
         rx_data = bytearray(1)
@@ -956,23 +945,25 @@ class PioNandCommander:
 
         # Start DMA
         rx_dma0.active(1)
-        proxy_dma0.active(1)
         tx_dma0.active(1)
-        await self._wait_for_dma(
-            rx_dma0,
-            lambda: print(
-                f"sm0_tx:{sm0.tx_fifo()}, sm0_rx:{sm0.rx_fifo()}, sm4_tx:{sm4.tx_fifo()}, sm4_rx:{sm4.rx_fifo()}"
-                f", tx_dma0:{tx_dma0.active()}, tx_dma1:{tx_dma1.active()}, tx_dma2:{tx_dma2.active()}, proxy_dma0:{proxy_dma0.active()}, rx_dma0:{rx_dma0.active()}"
-            ),
-        )
+        # TODO: read_idに同じく
+        while not complete and rx_dma0.active():
+            await uasyncio.sleep_ms(self._wait_ms)
+            print(
+                f"tx_dma0.active(): {tx_dma0.active()}, "
+                f"tx_dma1.active(): {tx_dma1.active()}, "
+                f"tx_dma2.active(): {tx_dma2.active()}, "
+                f"rx_dma0.active(): {rx_dma0.active()}, "
+                f"sm0.active(): {sm0.active()}, "
+                f"sm0.tx_fifo(): {sm0.tx_fifo()}, "
+                f"sm0.rx_fifo(): {sm0.rx_fifo()}, "
+            )
 
         # finalize
         sm0.active(0)
-        sm4.active(0)
         tx_dma0.close()
         tx_dma1.close()
         tx_dma2.close()
-        proxy_dma0.close()
         rx_dma0.close()
 
         is_ok = (rx_data[0] & NandStatus.PROGRAM_ERASE_FAIL) == 0
