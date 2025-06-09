@@ -714,10 +714,7 @@ class PioNandCommander:
         # Start DMA
         rx_dma0.active(1)
         tx_dma0.active(1)
-
-        # TODO: 正しい待ち方ではないので原因がわかった後に修正する
-        #     :  DMAのcount分の転送が終わってもpassiveにならないケースもしくはPIOのIRQが発火しないケースが有るが、転送自体は終わっている
-        while not complete and rx_dma0.active():
+        while rx_dma0.active():
             await uasyncio.sleep_ms(self._wait_ms)
 
         # finalize
@@ -768,8 +765,7 @@ class PioNandCommander:
         # start DMA
         rx_dma0.active(1)
         tx_dma0.active(1)
-        # TODO: read_idに同じく
-        while not complete and rx_dma0.active():
+        while rx_dma0.active():
             await uasyncio.sleep_ms(self._wait_ms)
 
         # finalize
@@ -805,8 +801,7 @@ class PioNandCommander:
         # start DMA
         rx_dma0.active(1)
         tx_dma0.active(1)
-        # TODO: read_idに同じく
-        while not complete and rx_dma0.active():
+        while rx_dma0.active():
             await uasyncio.sleep_ms(self._wait_ms)
 
         # finalize
@@ -843,8 +838,7 @@ class PioNandCommander:
         # start DMA
         rx_dma0.active(1)
         tx_dma0.active(1)
-        # TODO: read_idに同じく
-        while not complete and rx_dma0.active():
+        while rx_dma0.active():
             await uasyncio.sleep_ms(self._wait_ms)
 
         # finalize
@@ -873,7 +867,6 @@ class PioNandCommander:
 
         sm0.irq(set_complete)
         sm0.active(1)
-        # TODO: proxy PIO1 merge_cs. 2chip搭載には対応できていないので、この場合はprogram_page_simpleを使うこと
 
         async def _create_payload0() -> array.array:
             tx_payload0 = array.array("I")
@@ -980,19 +973,8 @@ class PioNandCommander:
         # Start DMA
         rx_dma0.active(1)
         tx_dma0.active(1)
-        # TODO: read_idに同じく
-        while not complete and rx_dma0.active():
+        while rx_dma0.active():
             await uasyncio.sleep_ms(self._wait_ms)
-            # for debug
-            # print(
-            #     f"tx_dma0.active(): {tx_dma0.active()}, "
-            #     f"tx_dma1.active(): {tx_dma1.active()}, "
-            #     f"tx_dma2.active(): {tx_dma2.active()}, "
-            #     f"rx_dma0.active(): {rx_dma0.active()}, "
-            #     f"sm0.active(): {sm0.active()}, "
-            #     f"sm0.tx_fifo(): {sm0.tx_fifo()}, "
-            #     f"sm0.rx_fifo(): {sm0.rx_fifo()}, "
-            # )
 
         # finalize
         sm0.active(0)

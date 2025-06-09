@@ -38,7 +38,7 @@ async def main() -> None:
     src_data = bytearray([x & 0xFF for x in range(NandConfig.PAGE_ALL_BYTES)])
     nandio = NandIo()
     targets = [
-        ("Fw ", FwNandCommander(nandio)),
+        ("Fw", FwNandCommander(nandio)),
         ("Pio", PioNandCommander(nandio)),
     ]
 
