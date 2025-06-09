@@ -95,14 +95,9 @@ def cli(
     "--bin_path",
     type=click.Path(exists=True, path_type=Path),
 )
-@click.option(
-    "--py_path",
-    type=click.Path(exists=True, path_type=Path),
-)
 def asm(
     pio_path: Path,
     bin_path: Path | None = None,
-    py_path: Path | None = None,
 ):
     """Assemble the PIO program."""
     if not pio_path.exists():
@@ -110,27 +105,15 @@ def asm(
         return
     if bin_path is None:
         bin_path = pio_path.with_suffix(".bin")
-    if py_path is None:
-        py_path = pio_path.with_suffix(".py")
 
     program_str = Path(pio_path).read_text(encoding="utf-8")
-    program_crc = zlib.crc32(Path(pio_path).read_bytes())
-    # array.array("H") u16
     opcodes_arr: array.array = adafruit_pioasm.assemble(program_str)
-    # 2byte * 32entry の opcode_arr を little endian で 4byte * 8entry = 32byteのリストにする
-    opcodes_list: List[int] = list(opcodes_arr)
-    # save binary output
-    py_str = (
-        f"# generated from {pio_path.name}. created_at={datetime.datetime.now()} crc32=0x{program_crc:08x}\n"
-        f"PIO_OPCODES = {opcodes_list}\n"
-    )
     bin_path.write_bytes(opcodes_arr.tobytes())
-    py_path.write_text(py_str, encoding="utf-8")
 
     console.print(
-        f"[green]PIO program assembled successfully: binary={bin_path.absolute()}, python={py_path.absolute()}[/green]"
+        f"[green]PIO program assembled successfully![/green]\n"
+        f"Output binary saved to: {bin_path.absolute()}"
     )
-    console.print(f"```python\n{py_str}\n```")
 
 
 @cli.command()
