@@ -14,7 +14,7 @@ Accelerating NAND Flash Communication using PIO (Programmable IO).
 
 ### Waveforms
 
-![Logic Analyzer Waveforms](/misc/PioNandDriver-ProgramPage-Core125MHz-Pio125MHz.png)
+![Logic Analyzer Waveforms](/misc/PioNandCommander-ProgramPage-Core125MHz-Pio125MHz.png)
 
 ### Performance
 
