@@ -8,45 +8,62 @@ from mpy.driver import FwNandCommander, NandIo, PioNandCommander
 async def test_erase_program(
     commander: FwNandCommander | PioNandCommander,
     src_data: bytearray,
-) -> bytearray:
+) -> tuple[bytearray, int, int, int, int]:
+    # 各時刻を控えながら実行
+    checkpoint0_ms = utime.ticks_us()
+    await commander.read_id(0)
+    checkpoint1_ms = utime.ticks_us()
     await commander.erase_block(0, 0)
+    checkpoint2_ms = utime.ticks_us()
     await commander.program_page(
         0,
         0,
         0,
         src_data,
     )
+    checkpoint3_ms = utime.ticks_us()
     dst_data = await commander.read_page(0, 0, 0, 0)
+    checkpoint4_ms = utime.ticks_us()
     assert dst_data is not None, "Read data is None"
-    return dst_data
 
-
-async def test_erase_program_fw(src_data: bytearray) -> bytearray:
-    commander = FwNandCommander(NandIo(keep_wp=False))
-    return await test_erase_program(commander, src_data)
-
-
-async def test_erase_program_pio(src_data: bytearray) -> bytearray:
-    commander = PioNandCommander(NandIo(keep_wp=False))
-    return await test_erase_program(commander, src_data)
+    # 時間集計
+    read_id_us = utime.ticks_diff(checkpoint1_ms, checkpoint0_ms)
+    erase_block_us = utime.ticks_diff(checkpoint2_ms, checkpoint1_ms)
+    program_page_us = utime.ticks_diff(checkpoint3_ms, checkpoint2_ms)
+    read_page_us = utime.ticks_diff(checkpoint4_ms, checkpoint3_ms)
+    return dst_data, read_id_us, erase_block_us, program_page_us, read_page_us
 
 
 async def main() -> None:
     src_data = bytearray([x & 0xFF for x in range(NandConfig.PAGE_ALL_BYTES)])
+    nandio = NandIo()
+    targets = [
+        ("Fw ", FwNandCommander(nandio)),
+        ("Pio", PioNandCommander(nandio)),
+    ]
 
-    start_ms = utime.ticks_ms()
-    dst_data_pio = await test_erase_program_pio(src_data)
-    elapsed_ms_pio = utime.ticks_diff(utime.ticks_ms(), start_ms)
-    print(f"PIO erase/program time: {elapsed_ms_pio} ms")
+    for name, commander in targets:
+        (
+            dst_data,
+            read_id_us,
+            erase_block_us,
+            program_page_us,
+            read_page_us,
+        ) = await test_erase_program(
+            commander,
+            src_data,
+        )
+        print(
+            f"# `{name}` commander results:\n"
+            f"- Read ID time      : {read_id_us} us\n"
+            f"- Erase block time  : {erase_block_us} us\n"
+            f"- Program page time : {program_page_us} us\n"
+            f"- Read page time    : {read_page_us} us\n"
+        )
 
-    start_ms = utime.ticks_ms()
-    dst_data_fw = await test_erase_program_fw(src_data)
-    elapsed_ms_fw = utime.ticks_diff(utime.ticks_ms(), start_ms)
-    print(f"FW commander erase/program time: {elapsed_ms_fw} ms")
-
-    assert dst_data_pio == dst_data_fw, (
-        f"Data mismatch between PIO and FW commander.\npio:{dst_data_pio.hex()}\nfw :{dst_data_fw.hex()}"
-    )
+        assert dst_data == src_data, (
+            f"{name} commander: Data mismatch after program\n got: {dst_data.hex()}\nexpected: {src_data.hex()}"
+        )
 
 
 if __name__ == "__main__":

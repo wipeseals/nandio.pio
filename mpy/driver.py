@@ -983,15 +983,16 @@ class PioNandCommander:
         # TODO: read_idに同じく
         while not complete and rx_dma0.active():
             await uasyncio.sleep_ms(self._wait_ms)
-            print(
-                f"tx_dma0.active(): {tx_dma0.active()}, "
-                f"tx_dma1.active(): {tx_dma1.active()}, "
-                f"tx_dma2.active(): {tx_dma2.active()}, "
-                f"rx_dma0.active(): {rx_dma0.active()}, "
-                f"sm0.active(): {sm0.active()}, "
-                f"sm0.tx_fifo(): {sm0.tx_fifo()}, "
-                f"sm0.rx_fifo(): {sm0.rx_fifo()}, "
-            )
+            # for debug
+            # print(
+            #     f"tx_dma0.active(): {tx_dma0.active()}, "
+            #     f"tx_dma1.active(): {tx_dma1.active()}, "
+            #     f"tx_dma2.active(): {tx_dma2.active()}, "
+            #     f"rx_dma0.active(): {rx_dma0.active()}, "
+            #     f"sm0.active(): {sm0.active()}, "
+            #     f"sm0.tx_fifo(): {sm0.tx_fifo()}, "
+            #     f"sm0.rx_fifo(): {sm0.rx_fifo()}, "
+            # )
 
         # finalize
         sm0.active(0)
