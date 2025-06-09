@@ -529,6 +529,7 @@ class PioNandCommander:
             nop().side(self._ss_state_dout0)  # /RE=L 2cyc
             nop().side(self._ss_state_dout0)  # /RE=L 3cyc
             nop().side(self._ss_state_dout0)  # /RE=L 4cyc
+            # nandio.pio との差分。このあとにIRQに1cyc回している。これはDMAがPassiveにならないケースのWA
             in_(pins, 8).side(self._ss_state_dout1)  # /RE=H, ceb0/1は無視
             jmp(x_dec, "data_out_main").side(self._ss_state_dout1)  # /RE=H
             irq(rel(0)).side(self._ss_state_dout1)  # notify PIO IRQ
@@ -872,7 +873,7 @@ class PioNandCommander:
 
         sm0.irq(set_complete)
         sm0.active(1)
-        # TODO: proxy PIO1 merge_cs
+        # TODO: proxy PIO1 merge_cs. 2chip搭載には対応できていないので、この場合はprogram_page_simpleを使うこと
 
         def _create_payload0() -> array.array:
             tx_payload0 = array.array("I")
@@ -907,9 +908,6 @@ class PioNandCommander:
         tx_payload0 = _create_payload0()
         tx_payload1 = data
         tx_payload2 = _create_payload2()
-        print(f"tx_payload0: {tx_payload0}")
-        print(f"tx_payload1: {tx_payload1}")
-        print(f"tx_payload2: {tx_payload2}")
 
         # TX PayloadのChain用に事前確保
         tx_dma0 = rp2.DMA()
@@ -964,6 +962,65 @@ class PioNandCommander:
         tx_dma0.close()
         tx_dma1.close()
         tx_dma2.close()
+        rx_dma0.close()
+
+        is_ok = (rx_data[0] & NandStatus.PROGRAM_ERASE_FAIL) == 0
+        return is_ok
+
+    async def program_page_simple(
+        self,
+        chip_index: int,
+        block: int,
+        page: int,
+        data: bytearray,
+        col: int = 0,
+    ) -> bool:
+        sm0 = self._setup_pio0_nandio()
+        complete = False
+
+        def set_complete(_):
+            nonlocal complete
+            complete = True
+
+        sm0.irq(set_complete)
+        sm0.active(1)
+
+        data_extend = array.array("I", [x for x in data])
+        tx_payload0 = array.array("I")
+        PioCmdBuilder.seq_program(
+            tx_payload0,
+            cs=chip_index,
+            column_addr=col,
+            page_addr=page,
+            block_addr=block,
+            data=data_extend,
+        )
+
+        tx_dma0 = self._setup_tx_dma_word(
+            dreq=Dreq.PIO0_SM0_TX, sm=sm0, tx_payload=tx_payload0
+        )
+
+        rx_data = bytearray(1)
+        rx_dma0 = self._setup_rx_dma_byte(
+            dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
+        )
+
+        # start DMA
+        rx_dma0.active(1)
+        tx_dma0.active(1)
+        while not complete and rx_dma0.active():
+            await uasyncio.sleep_ms(self._wait_ms)
+            print(
+                f"tx_dma0.active(): {tx_dma0.active()}, "
+                f"rx_dma0.active(): {rx_dma0.active()}, "
+                f"sm0.active(): {sm0.active()}, "
+                f"sm0.tx_fifo(): {sm0.tx_fifo()}, "
+                f"sm0.rx_fifo(): {sm0.rx_fifo()}, "
+            )
+
+        # finalize
+        sm0.active(0)
+        tx_dma0.close()
         rx_dma0.close()
 
         is_ok = (rx_data[0] & NandStatus.PROGRAM_ERASE_FAIL) == 0
