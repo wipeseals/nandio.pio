@@ -107,18 +107,14 @@ Run the `MicroPico: Upload project to Pico` (`@command:micropico.upload`) comman
 ##### Using mpremote
 
 ```bash
-uvx mpremote connect COM13 + fs --recursive --force cp main.py :/main.py + cp  nandio.py :/nandio.py + cp  sim/nandio_pio.py :/sim/nandio_pio.py  + cp  mpy/driver.py :/mpy/driver.py + fs ls + soft-reset + run main.py + repl
+uvx mpremote connect COM13 + fs --recursive --force cp main.py :/main.py + cp  sim/nandio_pio.py :/sim/nandio_pio.py  + cp  mpy/driver.py :/mpy/driver.py + fs ls + soft-reset + run main.py + repl
 cp main.py :/main.py
-cp nandio.py :/nandio.py
-Up to date: /nandio.py
 cp sim/nandio_pio.py :/sim/nandio_pio.py
 Up to date: /sim/nandio_pio.py
 cp mpy/driver.py :/mpy/driver.py
 ls :
          607 main.py
            0 mpy/
-         578 nand_block_allocator.json
-         332 nandio.py
            0 sim/
 (snip)
 ```
