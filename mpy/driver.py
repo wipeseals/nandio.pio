@@ -355,7 +355,7 @@ class PioNandCommander:
         nandio: NandIo,
         wait_ms: int = 1,
         timeout_ms: int = 5000,
-        max_freq: int = 100_000_000,
+        max_freq: int = 125_000_000,
     ) -> None:
         self._wait_ms = wait_ms
         self._timeout_ms = timeout_ms
@@ -529,10 +529,9 @@ class PioNandCommander:
             nop().side(self._ss_state_dout0)  # /RE=L 2cyc
             nop().side(self._ss_state_dout0)  # /RE=L 3cyc
             nop().side(self._ss_state_dout0)  # /RE=L 4cyc
-            # nandio.pio との差分。このあとにIRQに1cyc回している。これはDMAがPassiveにならないケースのWA
+            nop().side(self._ss_state_dout0)  # /RE=L 5cyc
             in_(pins, 8).side(self._ss_state_dout1)  # /RE=H, ceb0/1は無視
             jmp(x_dec, "data_out_main").side(self._ss_state_dout1)  # /RE=H
-            irq(rel(0)).side(self._ss_state_dout1)  # notify PIO IRQ
             jmp("setup").side(self._ss_state_dout1)
 
             ########################################################################
