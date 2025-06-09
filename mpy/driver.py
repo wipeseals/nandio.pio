@@ -1,3 +1,4 @@
+import uctypes
 import uasyncio
 import utime
 from micropython import const
@@ -352,9 +353,11 @@ class PioNandCommander:
     def __init__(
         self,
         nandio: NandIo,
+        wait_ms: int = 1,
         timeout_ms: int = 5000,
-        max_freq: int = 125_000_000,
+        max_freq: int = 100_000_000,
     ) -> None:
+        self._wait_ms = wait_ms
         self._timeout_ms = timeout_ms
         self._max_freq = max_freq
         self._nandio = nandio
@@ -521,14 +524,14 @@ class PioNandCommander:
             label("data_out_main")
             # cmd_1 = { reserved }
             # transfer_count分だけ /RE をトグルし、データをGPIOから読み取りpush
-            # /RE=L (t_rr + t_rea = 40ns / 5cyc => 8ns = 125MHz)
+            # /RE=L (t_rr + t_rea = 40ns / 4cyc => 10ns = 100MHz)
             nop().side(self._ss_state_dout0)  # /RE=L 1cyc
             nop().side(self._ss_state_dout0)  # /RE=L 2cyc
             nop().side(self._ss_state_dout0)  # /RE=L 3cyc
             nop().side(self._ss_state_dout0)  # /RE=L 4cyc
-            nop().side(self._ss_state_dout0)  # /RE=L 5cyc
             in_(pins, 8).side(self._ss_state_dout1)  # /RE=H, ceb0/1は無視
             jmp(x_dec, "data_out_main").side(self._ss_state_dout1)  # /RE=H
+            irq(rel(0)).side(self._ss_state_dout1)  # notify PIO IRQ
             jmp("setup").side(self._ss_state_dout1)
 
             ########################################################################
@@ -671,7 +674,7 @@ class PioNandCommander:
         while dma.active():
             if f:
                 f()
-            await uasyncio.sleep_ms(1)
+            await uasyncio.sleep_ms(self._wait_ms)
             elapsed_ms = utime.ticks_diff(utime.ticks_ms(), start_ms)
             if elapsed_ms > self._timeout_ms:
                 raise RuntimeError(
@@ -699,6 +702,13 @@ class PioNandCommander:
 
     async def read_id(self, chip_index: int, num_bytes: int = 5) -> bytearray:
         sm0 = self._setup_pio0_nandio()
+        complete = False
+
+        def set_complete(_):
+            nonlocal complete
+            complete = True
+
+        sm0.irq(set_complete)
         sm0.active(1)
 
         # TX Payload
@@ -711,13 +721,27 @@ class PioNandCommander:
         # RX Data
         rx_data = bytearray(num_bytes)
         rx_dma0 = self._setup_rx_dma_byte(
-            dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=num_bytes
+            dreq=Dreq.PIO0_SM0_RX, sm=sm0, rx_data=rx_data, num_bytes=1
+        )
+
+        # buffer address
+        print(
+            f"&tx_payload: {uctypes.addressof(tx_payload):#x}, &rx_data: {uctypes.addressof(rx_data):#x}"
         )
 
         # Start DMA
         rx_dma0.active(1)
         tx_dma0.active(1)
-        await self._wait_for_dma(rx_dma0)
+
+        start_ms = utime.ticks_ms()
+        while not complete:
+            await uasyncio.sleep_ms(self._wait_ms)
+            # timeout
+            elapsed_ms = utime.ticks_diff(utime.ticks_ms(), start_ms)
+            if elapsed_ms > self._timeout_ms:
+                raise RuntimeError(
+                    f"Timeout while waiting for DMA to finish. Elapsed: {elapsed_ms} ms"
+                )
 
         # finalize
         sm0.active(0)
@@ -877,6 +901,10 @@ class PioNandCommander:
         tx_payload0 = _create_payload0()
         tx_payload1 = data
         tx_payload2 = _create_payload2()
+        # buffer address
+        print(f"&tx_payload0: {uctypes.addressof(tx_payload0)}")
+        print(f"&tx_payload1: {uctypes.addressof(tx_payload1)}")
+        print(f"&tx_payload2: {uctypes.addressof(tx_payload2)}")
 
         # TX PayloadのChain用に事前確保
         tx_dma0 = rp2.DMA()
