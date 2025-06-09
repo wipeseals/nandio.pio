@@ -5,14 +5,41 @@
 
 Accelerating NAND Flash Communication using PIO (Programmable IO).
 
-![Logic Analyzer Waveforms](/misc/PioNandDriver-ProgramPage-Core125MHz-Pio125MHz.png)
-
 ## Features
 
 - High-speed NAND flash communication using PIO
 - PIO simulation environment for verification
 - Supports JISC-SSD (Jisaku In-Storage Computation SSD) board
 - Unit tests and CI for quality assurance
+
+### Waveforms
+
+![Logic Analyzer Waveforms](/misc/PioNandDriver-ProgramPage-Core125MHz-Pio125MHz.png)
+
+### Performance
+
+JISC-SSD board with RP2040 and NAND Flash (TC58NVG0S3HTA00) performance comparison.
+
+CPU Clock: 125MHz, PIO clock: 125MHz.
+
+```bash
+MPY: soft reboot
+# `Fw` commander results:
+- Read ID time      : 25535 us
+- Erase block time  : 14917 us
+- Program page time : 8588183 us
+- Read page time    : 16175634 us
+
+# `Pio` commander results:
+- Read ID time      : 3800 us
+- Erase block time  : 7402 us
+- Program page time : 21549 us
+- Read page time    : 4425 us
+
+MicroPython v1.25.0 on 2025-04-15; Raspberry Pi Pico with RP2040
+Type "help()" for more information.
+>>>
+```
 
 ## Installation
 
@@ -53,9 +80,8 @@ To assemble the PIO program, you can use the `uv` command with the `asm` option.
 
 ```bash
 uv run sim/cli.py asm
-PIO program assembled successfully: binary=</path/to/nandio.bin>, python=</path/to/nandio.py>
-import array
-PIO_OPCODES: array.array = array('H', [40096, 31888, 31788, 31812, 40096, 7304, 31754, 7168, 7308, 29962, 46402, 7424, 7313, 38560, 30218, 7757, 7168, 7320, 44098, 44098, 23560, 39968, 7250, 7168, 7327, 38048, 29706, 7257, 7168, 56320, 7168, 15503])
+PIO program assembled successfully!
+Output binary saved to: </path/to/output/nandio.pio.bin>
 ```
 
 ### JISC-SSD Board (RP2040 + NAND Flash)
@@ -77,14 +103,13 @@ Run the `MicroPico: Upload project to Pico` (`@command:micropico.upload`) comman
 ##### Using mpremote
 
 ```bash
-uvx mpremote connect COM13 + fs --recursive --force cp main.py :/main.py + cp  nandio.py :/nandio.py + cp  sim/nandio_pio.py :/sim/nandio_pio.py  + cp  mpy/driver.py :/mpy/driver.py + cp mpy/ftl.py :/mpy/ftl.py + fs ls + soft-reset + run main.py + repl
+uvx mpremote connect COM13 + fs --recursive --force cp main.py :/main.py + cp  nandio.py :/nandio.py + cp  sim/nandio_pio.py :/sim/nandio_pio.py  + cp  mpy/driver.py :/mpy/driver.py + fs ls + soft-reset + run main.py + repl
 cp main.py :/main.py
 cp nandio.py :/nandio.py
 Up to date: /nandio.py
 cp sim/nandio_pio.py :/sim/nandio_pio.py
 Up to date: /sim/nandio_pio.py
 cp mpy/driver.py :/mpy/driver.py
-cp mpy/ftl.py :/mpy/ftl.py
 ls :
          607 main.py
            0 mpy/
