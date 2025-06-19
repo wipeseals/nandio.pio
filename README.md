@@ -16,7 +16,7 @@ Accelerating NAND Flash Communication using PIO (Programmable IO).
 
 ![Logic Analyzer Waveforms](/misc/PioNandCommander-ProgramPage-Core125MHz-Pio125MHz.png)
 
-### Simulation
+### Online Simulation
 
 <https://wipeseals.github.io/nandio.pio/>
 
@@ -82,7 +82,7 @@ uv run pytest
 
 ## Usage
 
-### Simulation
+### Local Simulation
 
 To simulate the NAND Flash communication, you can use the provided simulation script. This will run the simulation using the `uv` command.
 
