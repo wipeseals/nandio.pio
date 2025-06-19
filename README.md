@@ -7,10 +7,10 @@ Accelerating NAND Flash Communication using PIO (Programmable IO).
 
 ## Features
 
-- High-speed NAND flash communication using PIO
-- PIO simulation environment for verification
-- Supports JISC-SSD (Jisaku In-Storage Computation SSD) board
-- Unit tests and CI for quality assurance
+- High-speed NAND flash communication using PIO and payload builder
+- Simulation environment for verification
+- async/await friendly API for MicroPython
+- Supports Raspberry Pi Pico and JISC-SSD (Jisaku In-Storage Computation SSD) board
 
 ### Waveforms
 
