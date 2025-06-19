@@ -36,6 +36,7 @@ async def test_erase_program(
 
 
 async def main() -> None:
+    # Uncomment the line below to set the CPU frequency to 250 MHz for testing or performance tuning.
     # machine.freq(250_000_000)
     print(f"CPU frequency: {machine.freq() * 1e-6} MHz")
 
