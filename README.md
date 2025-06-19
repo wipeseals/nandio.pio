@@ -7,16 +7,16 @@ Accelerating NAND Flash Communication using PIO (Programmable IO).
 
 ## Features
 
-- High-speed NAND flash communication using PIO
-- PIO simulation environment for verification
-- Supports JISC-SSD (Jisaku In-Storage Computation SSD) board
-- Unit tests and CI for quality assurance
+- High-speed NAND flash communication using PIO and payload builder
+- Simulation environment for verification
+- async/await friendly API for MicroPython
+- Supports Raspberry Pi Pico and JISC-SSD (Jisaku In-Storage Computation SSD) board
 
 ### Waveforms
 
 ![Logic Analyzer Waveforms](/misc/PioNandCommander-ProgramPage-Core125MHz-Pio125MHz.png)
 
-### Simulation
+### Online Simulation
 
 <https://wipeseals.github.io/nandio.pio/>
 
@@ -24,25 +24,47 @@ Accelerating NAND Flash Communication using PIO (Programmable IO).
 
 JISC-SSD board with RP2040 and NAND Flash (TC58NVG0S3HTA00) performance comparison.
 
-CPU Clock: 125MHz, PIO clock: 125MHz.
+#### CPU Clock: 125MHz, PIO Clock: 125MHz
 
 ```bash
 MPY: soft reboot
+CPU frequency: 125.0 MHz
 # `Fw` commander results:
-- Read ID time      : 25535 us
-- Erase block time  : 14917 us
-- Program page time : 8588183 us
-- Read page time    : 16175634 us
+- Read ID time      : 3391 us
+- Erase block time  : 4785 us
+- Program page time : 8560594 us
+- Read page time    : 3692423 us
 
 # `Pio` commander results:
-- Read ID time      : 3800 us
-- Erase block time  : 7402 us
-- Program page time : 21549 us
-- Read page time    : 4425 us
+- Read ID time      : 3527 us
+- Erase block time  : 6357 us
+- Program page time : 21405 us
+- Read page time    : 5491 us
 
 MicroPython v1.25.0 on 2025-04-15; Raspberry Pi Pico with RP2040
 Type "help()" for more information.
 >>>
+```
+
+#### CPU Clock: 250MHz, PIO Clock: 125MHz
+
+```bash
+MPY: soft reboot
+CPU frequency: 250.0 MHz
+# `Fw` commander results:
+- Read ID time      : 1771 us
+- Erase block time  : 2353 us
+- Program page time : 5421321 us
+- Read page time    : 1845875 us
+
+# `Pio` commander results:
+- Read ID time      : 1735 us
+- Erase block time  : 3733 us
+- Program page time : 11197 us
+- Read page time    : 3293 us
+
+MicroPython v1.25.0 on 2025-04-15; Raspberry Pi Pico with RP2040
+Type "help()" for more information.
 ```
 
 ## Installation
@@ -60,7 +82,7 @@ uv run pytest
 
 ## Usage
 
-### Simulation
+### Local Simulation
 
 To simulate the NAND Flash communication, you can use the provided simulation script. This will run the simulation using the `uv` command.
 

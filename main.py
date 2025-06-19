@@ -1,7 +1,8 @@
-from sim.nandio_pio import NandConfig
+import machine
 import utime
 import uasyncio
 
+from sim.nandio_pio import NandConfig
 from mpy.driver import FwNandCommander, NandIo, PioNandCommander
 
 
@@ -35,6 +36,10 @@ async def test_erase_program(
 
 
 async def main() -> None:
+    # Uncomment the line below to set the CPU frequency to 250 MHz for testing or performance tuning.
+    # machine.freq(250_000_000)
+    print(f"CPU frequency: {machine.freq() * 1e-6} MHz")
+
     src_data = bytearray([x & 0xFF for x in range(NandConfig.PAGE_ALL_BYTES)])
     nandio = NandIo()
     targets = [
