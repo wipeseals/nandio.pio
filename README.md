@@ -24,22 +24,44 @@ Accelerating NAND Flash Communication using PIO (Programmable IO).
 
 JISC-SSD board with RP2040 and NAND Flash (TC58NVG0S3HTA00) performance comparison.
 
-CPU Clock: 125MHz, PIO clock: 125MHz.
+#### CPU Clock: 125MHz, PIO Clock: 125MHz
 
 ```bash
->>>
 MPY: soft reboot
+CPU frequency: 125.0 MHz
 # `Fw` commander results:
-- Read ID time      : 3554 us
-- Erase block time  : 4616 us
-- Program page time : 8587945 us
-- Read page time    : 3725293 us
+- Read ID time      : 3391 us
+- Erase block time  : 4785 us
+- Program page time : 8560594 us
+- Read page time    : 3692423 us
 
 # `Pio` commander results:
-- Read ID time      : 3502 us
-- Erase block time  : 5693 us
-- Program page time : 20090 us
-- Read page time    : 5660 us
+- Read ID time      : 3527 us
+- Erase block time  : 6357 us
+- Program page time : 21405 us
+- Read page time    : 5491 us
+
+MicroPython v1.25.0 on 2025-04-15; Raspberry Pi Pico with RP2040
+Type "help()" for more information.
+>>>
+```
+
+#### CPU Clock: 250MHz, PIO Clock: 125MHz
+
+```bash
+MPY: soft reboot
+CPU frequency: 250.0 MHz
+# `Fw` commander results:
+- Read ID time      : 1771 us
+- Erase block time  : 2353 us
+- Program page time : 5421321 us
+- Read page time    : 1845875 us
+
+# `Pio` commander results:
+- Read ID time      : 1735 us
+- Erase block time  : 3733 us
+- Program page time : 11197 us
+- Read page time    : 3293 us
 
 MicroPython v1.25.0 on 2025-04-15; Raspberry Pi Pico with RP2040
 Type "help()" for more information.
