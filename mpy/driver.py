@@ -145,7 +145,7 @@ class NandIo:
         await self.set_io(cmd)
         await self.set_cle(1)
         await self.set_web(0)
-        await self.delay()
+        # await self.delay() # FWOHで十分遅いので無効
         await self.set_web(1)
         await self.set_cle(0)
 
@@ -154,7 +154,7 @@ class NandIo:
             await self.set_io(addr)
             await self.set_ale(1)
             await self.set_web(0)
-            await self.delay()
+            # await self.delay() # FWOHで十分遅いので無効
             await self.set_web(1)
             await self.set_ale(0)
 
@@ -167,10 +167,10 @@ class NandIo:
         await self.set_io_dir(is_output=False)
         for i in range(num_bytes):
             await self.set_reb(0)
-            await self.delay()
+            # await self.delay() # FWOHで十分遅いので無効
             datas.append(await self.get_io())
             await self.set_reb(1)
-            await self.delay()
+            # await self.delay() # FWOHで十分遅いので無効
         await self.set_io_dir(is_output=True)
         return datas
 

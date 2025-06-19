@@ -27,22 +27,22 @@ JISC-SSD board with RP2040 and NAND Flash (TC58NVG0S3HTA00) performance comparis
 CPU Clock: 125MHz, PIO clock: 125MHz.
 
 ```bash
+>>>
 MPY: soft reboot
 # `Fw` commander results:
-- Read ID time      : 25535 us
-- Erase block time  : 14917 us
-- Program page time : 8588183 us
-- Read page time    : 16175634 us
+- Read ID time      : 3554 us
+- Erase block time  : 4616 us
+- Program page time : 8587945 us
+- Read page time    : 3725293 us
 
 # `Pio` commander results:
-- Read ID time      : 3800 us
-- Erase block time  : 7402 us
-- Program page time : 21549 us
-- Read page time    : 4425 us
+- Read ID time      : 3502 us
+- Erase block time  : 5693 us
+- Program page time : 20090 us
+- Read page time    : 5660 us
 
 MicroPython v1.25.0 on 2025-04-15; Raspberry Pi Pico with RP2040
 Type "help()" for more information.
->>>
 ```
 
 ## Installation
