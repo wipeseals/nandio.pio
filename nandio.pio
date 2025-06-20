@@ -30,11 +30,10 @@
 ;
 ; - remarks
 ;   - autopull は未使用, autopush はしきい値32bitで使用
-;   - data input は1byte(+2bit ceb) ごと転送するが、 data output は4byteごと big endianで転送される
 ;   - ISRは左シフト、OSRは右シフトで設定（Data Outputで pins -> isr -> rx fifoへの転送をin+pushで行うため、LSBから1byte分を有効データとして受信）
 ;   - TX/RX FIFOは束ねずDepth=4でも動作するが、可能であれば連結した方が良い
 ;   - TX FIFO/RX FIFOはCPUもしくはDMA経由で、DREQを使って転送する想定
-;   - 命令数やビット数の都合でceb1, ceb0とioの個別制御ができていない。AddrLatch, CmdLatch, DataInputにおいてはceb1, ceb0を一緒に転送する必要がある
+;   - 命令数やビット数の都合でceb1, ceb0とioの個別制御ができていない。2chip制御する場合、AddrLatch, CmdLatch, DataInputにおいてはceb1, ceb0を一緒に転送する必要がある
 
 .wrap_target
 .side_set 5
@@ -97,8 +96,6 @@ addr_latch_main:
     ; 読み込んだデータの出力はISR->RXFIFOに行うため、RX FIFO Fullになると転送がストールする
     ; sidesetの使い方は、AC Characteristicsを満たすために調整する
     ; csの設定は、bitbangで事前に設定する必要がある
-    ; autopushを用いて1byte転送ごとに1pushするので、4byte単位の転送数を設定する必要がある
-    ;  (設定しなかった場合、最後の非アライン分のデータは転送されるが、LSB詰めされている)
     ;
     ; cmd_1 = { reserved }
 data_output_setup:
